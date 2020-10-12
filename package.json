@@ -1,0 +1,19 @@
+{
+  "name": "hml",
+  "version": "0.0.1",
+  "description": "A simple ML like language with Hindley-Milner type inference",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/archanpatkar/HML.git"
+  },
+  "author": "Archan Patkar",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/archanpatkar/HML/issues"
+  },
+  "homepage": "https://github.com/archanpatkar/HML#readme"
+}
