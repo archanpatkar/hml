@@ -15,5 +15,9 @@
   "bugs": {
     "url": "https://github.com/archanpatkar/HML/issues"
   },
-  "homepage": "https://github.com/archanpatkar/HML#readme"
+  "homepage": "https://github.com/archanpatkar/HML#readme",
+  "dependencies": {
+    "saman": "0.0.1",
+    "styp": "0.0.1"
+  }
 }
