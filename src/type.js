@@ -2,6 +2,7 @@
 // Based on -
 // http://dev.stephendiehl.com/fun/type_systems.html#simply-typed-lambda-calculus
 // https://www.cs.cornell.edu/courses/cs6110/2013sp/lectures/lec25-sp13.pdf
+const saman = require("saman");
 const { equal } = require("saman");
 const { sum, tagged } = require("styp");
 
@@ -129,5 +130,64 @@ let code = App(
 );
 console.log(tc1.infer(code).toString());
 tc1.constraints.map(c => console.log(c.toString()));
+
+function occursCheck(v,t,subst) {
+    if(saman.equal(v,t)) return true;
+    else if(Type.TVar.is(t) && t.v in subst) 
+        return occursCheck(v,subst[t.v],subst);
+    else if(Type.TArr.is(t))
+        return occursCheck(v,t.t2,subst) || occursCheck(v,t.t1,subst);
+    return false;
+}
+
+function unifyVar(v,t,subst) {
+    if(v.v in subst) return unify(subst[v.v],t,subst);
+    else if(Type.TVar.is(t) && t.v in subst) return unify(v,subst[t.v],subst);
+    else if(occursCheck(v,t,subst)) return null;
+    else {
+        subst[v.v] = t;
+        return subst;
+    }
+}
+
+function unify(t1,t2,subst) {
+    if(equal(t1,t2)) return subst;
+    else if(Type.TVar.is(t1)) return unifyVar(t1,t2,subst);
+    else if(Type.TVar.is(t2)) return unifyVar(t2,t1,subst);
+    else if(Type.TArr.is(t1) && Type.TArr.is(t2)) {
+        subst = unify(t1.t2,t2.t2,subst);
+        return unify(t1.t1,t2.t1,subst);
+    }
+    return null;
+}
+
+function unifyAll(equations) {
+    subst = {}
+    for(let eq of equations) {
+        console.log(eq.toString());
+        subst = unify(eq.left,eq.right,subst);
+        console.log(subst);
+        if(subst == null) break;
+    }
+    return subst;
+}
+
+console.log(unifyAll(tc1.constraints));
+
+function applyUnifier(typ,subst) {
+    if(!subst) return null;
+    else if(Object.keys(subst).length == 0) return typ;
+    else if(Type.TVar.is(typ)) {
+        if(typ.v in subst) return applyUnifier(subst[typ.v],subst);
+        return typ;
+    }
+    else if(Type.TArr.is(typ)) {
+        return Type.TArr(
+            applyUnifier(typ.t1,subst),
+            applyUnifier(typ.t2,subst)
+        );
+    }
+    return null;
+}
 
 module.exports = TypeChecker;
