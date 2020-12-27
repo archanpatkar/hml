@@ -19,7 +19,7 @@ const Type = sum("Types", {
 
 const Constraint = tagged("ConstraintEq",["left","right"]);
 
-const TypeEnv = () => new Map();
+// const TypeEnv = () => new Map();
 
 const TInt = Type.TCon("int");
 const TBool = Type.TCon("bool");
@@ -34,7 +34,7 @@ const notType = (type,msg) => genericError(`Expected type '${printType(type)}' $
 const typeMismatch = (type1,type2) => genericError(`Couldn't match the expected type: ${printType(type1)} with type: ${printType(type2)}`);
 const nonFunction = (type) => genericError(`Tried to apply to non-Function type --> ${type}`);
 
-class SymbolTable {
+class TypeEnv {
     constructor(parent) {
         this.env = {};
         this.parent = parent;
@@ -57,7 +57,7 @@ class SymbolTable {
 
 class TypeChecker {
     constructor() {
-        this.sym = new SymbolTable(null);
+        this.sym = new TypeEnv(null);
         this.count = 0;
         this.typeenv = TypeEnv();
         this.constraints = [];
@@ -87,7 +87,7 @@ class TypeChecker {
             return t1;
         }
         else if (ast.node == "lambda") {
-            const ne = new SymbolTable(sym);
+            const ne = new TypeEnv(sym);
             const tv = this.fresh();
             ne.addBinding(ast.param, tv);
             const body = this.infer(ast.body,ne);
@@ -132,6 +132,9 @@ console.log(tc1.infer(code).toString());
 tc1.constraints.map(c => console.log(c.toString()));
 
 function occursCheck(v,t,subst) {
+    console.log(v.toString())
+    console.log(t.toString())
+    console.log(subst)
     if(saman.equal(v,t)) return true;
     else if(Type.TVar.is(t) && t.v in subst) 
         return occursCheck(v,subst[t.v],subst);
@@ -141,6 +144,9 @@ function occursCheck(v,t,subst) {
 }
 
 function unifyVar(v,t,subst) {
+    console.log(v.toString())
+    console.log(t.toString())
+    console.log(subst)
     if(v.v in subst) return unify(subst[v.v],t,subst);
     else if(Type.TVar.is(t) && t.v in subst) return unify(v,subst[t.v],subst);
     else if(occursCheck(v,t,subst)) return null;
@@ -151,6 +157,9 @@ function unifyVar(v,t,subst) {
 }
 
 function unify(t1,t2,subst) {
+    console.log(t1.toString())
+    console.log(t2.toString())
+    console.log(subst)
     if(equal(t1,t2)) return subst;
     else if(Type.TVar.is(t1)) return unifyVar(t1,t2,subst);
     else if(Type.TVar.is(t2)) return unifyVar(t2,t1,subst);
@@ -162,6 +171,7 @@ function unify(t1,t2,subst) {
 }
 
 function unifyAll(equations) {
+    console.log("starting!");
     subst = {}
     for(let eq of equations) {
         console.log(eq.toString());
@@ -169,14 +179,17 @@ function unifyAll(equations) {
         console.log(subst);
         if(subst == null) break;
     }
+    console.log("ending!");
     return subst;
 }
 
-console.log(unifyAll(tc1.constraints));
+let sbs = unifyAll(tc1.constraints);
+console.log(sbs);
 
 function applyUnifier(typ,subst) {
     if(!subst) return null;
     else if(Object.keys(subst).length == 0) return typ;
+    else if(saman.equal(typ,TInt) || saman.equal(typ,TBool)) return typ;
     else if(Type.TVar.is(typ)) {
         if(typ.v in subst) return applyUnifier(subst[typ.v],subst);
         return typ;
@@ -189,5 +202,8 @@ function applyUnifier(typ,subst) {
     }
     return null;
 }
+
+console.log(applyUnifier(Type.TVar("t0"),sbs).toString());
+console.log(applyUnifier(Type.TVar("t1"),sbs).toString());
 
 module.exports = TypeChecker;
