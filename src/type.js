@@ -1,7 +1,4 @@
 // Type checker
-// Based on -
-// http://dev.stephendiehl.com/fun/type_systems.html#simply-typed-lambda-calculus
-// https://www.cs.cornell.edu/courses/cs6110/2013sp/lectures/lec25-sp13.pdf
 const saman = require("saman");
 const { equal } = require("saman");
 const { sum, tagged } = require("styp");
@@ -9,6 +6,7 @@ const { sum, tagged } = require("styp");
 const Type = sum("Types", {
     TVar:["v"],
     TCon:["name"],
+    TPair:["cons","cdr"],
     TArr:["t1","t2"]
 });
 
@@ -30,6 +28,7 @@ const printType = (type) => Array.isArray(type) ? `(${printType(type[0])}->${pri
 // Errors
 const genericError = (msg) => { throw new Error(msg) };
 const notInScope = (name) => genericError(`Variable --> '${name}' not in Scope`);
+const defInScope = (name) => genericError(`Cannot redefine Variable --> '${name}'`);
 const notType = (type,msg) => genericError(`Expected type '${printType(type)}' ${msg}`);
 const typeMismatch = (type1,type2) => genericError(`Couldn't match the expected type: ${printType(type1)} with type: ${printType(type2)}`);
 const nonFunction = (type) => genericError(`Tried to apply to non-Function type --> ${type}`);
@@ -38,6 +37,12 @@ class TypeEnv {
     constructor(parent) {
         this.env = {};
         this.parent = parent;
+    }
+
+    exists(name) {
+        if (this.env[name]) return this.env[name];
+        else if(this.parent) return this.parent.lookUp(name);
+        return false;
     }
 
     addBinding(name, type) {
@@ -59,7 +64,6 @@ class TypeChecker {
     constructor() {
         this.sym = new TypeEnv(null);
         this.count = 0;
-        // this.typeenv = new TypeEnv();
         this.constraints = [];
     }
 
@@ -74,8 +78,13 @@ class TypeChecker {
     unify() {}
     solve() {}
 
-    instanciate(type) {
-        
+    instantiate(type) {
+        let t1,t2;
+        if(Type.TVar.is(type.t1)) t1 = this.fresh();
+        if(Type.TArr.is(type.t2)) t2 = this.instantiate(type.t2);
+        else if(Type.TVar.is(type.t2)) t2 = this.fresh();
+        else t2 = type.t2;
+        return Type.TArr(t1,t2);
     }
 
     infer(ast,sym=this.sym) {
@@ -83,9 +92,12 @@ class TypeChecker {
             return ast.type == "int"? TInt:TBool;
         else if (ast.node == "var") {
             const t = sym.lookUp(ast.name);
-            if(Type.TArr.is(t)) {
-                
-            }
+            if(Type.TArr.is(t)) return this.instantiate(t);
+            return t;
+        }
+        else if (ast.node == "let") {
+            if(sym.exists(ast.name)) defInScope(ast.name);
+            
             return t;
         }
         else if (ast.node == "condition") {
