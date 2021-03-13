@@ -59,7 +59,7 @@ class TypeChecker {
     constructor() {
         this.sym = new TypeEnv(null);
         this.count = 0;
-        this.typeenv = TypeEnv();
+        // this.typeenv = new TypeEnv();
         this.constraints = [];
     }
 
@@ -77,7 +77,13 @@ class TypeChecker {
     infer(ast,sym=this.sym) {
         if (ast.node == "literal") 
             return ast.type == "int"? TInt:TBool;
-        else if (ast.node == "var") return sym.lookUp(ast.name);
+        else if (ast.node == "var") {
+            const t = sym.lookUp(ast.name);
+            if(Type.TArr.is(t)) {
+                
+            }
+            return t;
+        }
         else if (ast.node == "condition") {
             const cond = this.infer(ast.cond,sym);
             this.addConstraint(cond,TBool);
@@ -110,8 +116,10 @@ class TypeChecker {
 
 
 const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
+const Pair = (fst,snd) => ({ node:"pair", fst:fst, snd:snd });
 const Lit = (type, val) => ({ node: "literal", type: type, val: val });
 const Var = (name) => ({ node: "var", name: name });
+const LetB = (name,exp) => ({ node: "let", name: name, exp:exp });
 const App = (lam, param) => ({ node: "apply", exp1: lam, exp2: param });
 const Condition = (cond,e1,e2) => ({ node: "condition", cond:cond, exp1: e1, exp2: e2 });
 const BinOp = (op, l, r) => ({ node: op, l: l, r: r });
@@ -185,6 +193,9 @@ function unifyAll(equations) {
 
 let sbs = unifyAll(tc1.constraints);
 console.log(sbs);
+for(let a in sbs) {
+    console.log(`${a}: ${sbs[a].toString()}`)
+}
 
 function applyUnifier(typ,subst) {
     if(!subst) return null;
@@ -203,7 +214,7 @@ function applyUnifier(typ,subst) {
     return null;
 }
 
-console.log(applyUnifier(Type.TVar("t0"),sbs).toString());
-console.log(applyUnifier(Type.TVar("t1"),sbs).toString());
+// console.log(applyUnifier(Type.TVar("t0"),sbs).toString());
+// console.log(applyUnifier(Type.TVar("t1"),sbs).toString());
 
 module.exports = TypeChecker;
