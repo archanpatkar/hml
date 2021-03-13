@@ -74,6 +74,10 @@ class TypeChecker {
     unify() {}
     solve() {}
 
+    instanciate(type) {
+        
+    }
+
     infer(ast,sym=this.sym) {
         if (ast.node == "literal") 
             return ast.type == "int"? TInt:TBool;
