@@ -1,2 +1,2 @@
 # HML
-A simple ML like language with Hindley-Milner type inference
+A mini ML with Hindley-Milner type inference
