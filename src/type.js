@@ -10,6 +10,8 @@ const Type = sum("Types", {
     TArr:["t1","t2"]
 });
 
+// const Scheme = tagged("Scheme",["quantifiers","type"])
+
 // const Scheme = sum("Scheme", {
 //     Mono: ["t"],
 //     Poly:["var","t"]
@@ -65,6 +67,7 @@ class TypeChecker {
         this.sym = new TypeEnv(null);
         this.count = 0;
         this.constraints = [];
+        this.ctable = new Map();
     }
 
     fresh() {
@@ -72,6 +75,7 @@ class TypeChecker {
     }
 
     addConstraint(type1,type2) {
+        this.ctable.set(type1,type2);
         this.constraints.push(Constraint(type1,type2));
     }
 
@@ -129,7 +133,6 @@ class TypeChecker {
         return printType(this.check(ast))
     }
 }
-
 
 const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
 const Pair = (fst,snd) => ({ node:"pair", fst:fst, snd:snd });
