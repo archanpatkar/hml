@@ -1,12 +1,12 @@
 // Type checker
 const saman = require("saman");
-const { equal } = require("saman");
+const { equal, merge } = require("saman");
 const { sum, tagged } = require("styp");
 
 const Type = sum("Types", {
     TVar:["v"],
     TCon:["name"],
-    TPair:["cons","cdr"],
+    // TPair:["cons","cdr"],
     TArr:["t1","t2"]
 });
 
@@ -17,7 +17,7 @@ const Type = sum("Types", {
 //     Poly:["var","t"]
 // });
 
-const Constraint = tagged("ConstraintEq",["left","right"]);
+// const Constraint = tagged("ConstraintEq",["left","right"]);
 
 // const TypeEnv = () => new Map();
 
@@ -25,7 +25,7 @@ const TInt = Type.TCon("int");
 const TBool = Type.TCon("bool");
 
 const ops = ["ADD", "SUB", "DIV", "MUL"]
-const printType = (type) => Array.isArray(type) ? `(${printType(type[0])}->${printType(type[1])})` : type;
+// const printType = (type) => Array.isArray(type) ? `(${printType(type[0])}->${printType(type[1])})` : type;
 
 // Errors
 const genericError = (msg) => { throw new Error(msg) };
@@ -34,6 +34,17 @@ const defInScope = (name) => genericError(`Cannot redefine Variable --> '${name}
 const notType = (type,msg) => genericError(`Expected type '${printType(type)}' ${msg}`);
 const typeMismatch = (type1,type2) => genericError(`Couldn't match the expected type: ${printType(type1)} with type: ${printType(type2)}`);
 const nonFunction = (type) => genericError(`Tried to apply to non-Function type --> ${type}`);
+
+// temp
+const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
+const Pair = (fst,snd) => ({ node:"pair", fst:fst, snd:snd });
+const Lit = (type, val) => ({ node: "literal", type: type, val: val });
+const Var = (name) => ({ node: "var", name: name });
+const LetB = (name,exp) => ({ node: "let", name: name, exp:exp });
+const App = (lam, param) => ({ node: "apply", exp1: lam, exp2: param });
+const Condition = (cond,e1,e2) => ({ node: "condition", cond:cond, exp1: e1, exp2: e2 });
+const BinOp = (op, l, r) => ({ node: op, l: l, r: r });
+const UnOp = (op,v) => ({ node: op, val: v });
 
 class TypeEnv {
     constructor(parent) {
@@ -66,29 +77,81 @@ class TypeChecker {
     constructor() {
         this.sym = new TypeEnv(null);
         this.count = 0;
-        this.constraints = [];
-        this.ctable = new Map();
+        this.subst = {};
+        // this.constraints = [];
+        // this.variables = [];
+        // this.ctable = new Map();
     }
 
     fresh() {
-        return Type.TVar("t" + this.count++);
+        let temp = "t" + this.count++;
+        this.variables.push(temp);
+        return Type.TVar(temp);
     }
 
-    addConstraint(type1,type2) {
-        this.ctable.set(type1,type2);
-        this.constraints.push(Constraint(type1,type2));
+    // addConstraint(type1,type2) {
+    //     this.ctable.set(type1,type2);
+    //     this.constraints.push(Constraint(type1,type2));
+    // }
+
+    occursCheck(v,t,subst) {
+        if(saman.equal(v,t)) return true;
+        else if(Type.TVar.is(t) && t.v in subst) 
+            return occursCheck(v,subst[t.v],subst);
+        else if(Type.TArr.is(t))
+            return occursCheck(v,t.t2,subst) || occursCheck(v,t.t1,subst);
+        return false;
     }
 
-    unify() {}
-    solve() {}
+    unifyVar(v,t,subst) {
+        if(v.v in subst) return unify(subst[v.v],t,subst);
+        if(Type.TVar.is(t) && t.v in subst) return unify(v,subst[t.v],subst);
+        if(occursCheck(v,t,subst)) return null;
+        else {
+            subst[v.v] = t;
+            return subst;
+        }
+    }
+
+    unify(t1,t2,subst={}) {
+        if(equal(t1,t2)) return subst;
+        else if(Type.TVar.is(t1)) return unifyVar(t1,t2,subst);
+        else if(Type.TVar.is(t2)) return unifyVar(t2,t1,subst);
+        else if(Type.TArr.is(t1) && Type.TArr.is(t2)) {
+            subst = unify(t1.t2,t2.t2,subst);
+            return unify(t1.t1,t2.t1,subst);
+        }
+        return null;
+    }    
+
+    apply(typ,subst) {
+        if(!subst) return null;
+        else if(Object.keys(subst).length == 0) return typ;
+        else if(saman.equal(typ,TInt) || saman.equal(typ,TBool)) return typ;
+        else if(Type.TVar.is(typ)) {
+            if(typ.v in subst) return apply(subst[typ.v],subst);
+            return typ;
+        }
+        else if(Type.TArr.is(typ)) {
+            return Type.TArr(
+                apply(typ.t1,subst),
+                apply(typ.t2,subst)
+            );
+        }
+        return null;
+    }
 
     instantiate(type) {
-        let t1,t2;
-        if(Type.TVar.is(type.t1)) t1 = this.fresh();
-        if(Type.TArr.is(type.t2)) t2 = this.instantiate(type.t2);
-        else if(Type.TVar.is(type.t2)) t2 = this.fresh();
-        else t2 = type.t2;
-        return Type.TArr(t1,t2);
+        // let t1,t2;
+        // if(Type.TVar.is(type.t1)) t1 = this.fresh();
+        // if(Type.TArr.is(type.t2)) t2 = this.instantiate(type.t2);
+        // else if(Type.TVar.is(type.t2)) t2 = this.fresh();
+        // else t2 = type.t2;
+        // return Type.TArr(t1,t2);
+    }
+
+    generalize(type) {
+        
     }
 
     infer(ast,sym=this.sym) {
@@ -96,21 +159,22 @@ class TypeChecker {
             return ast.type == "int"? TInt:TBool;
         else if (ast.node == "var") {
             const t = sym.lookUp(ast.name);
-            if(Type.TArr.is(t)) return this.instantiate(t);
+            // if(Type.TArr.is(t)) return this.instantiate(t);
             return t;
         }
         else if (ast.node == "let") {
             if(sym.exists(ast.name)) defInScope(ast.name);
             
-            return t;
+            return null;
         }
         else if (ast.node == "condition") {
             const cond = this.infer(ast.cond,sym);
-            this.addConstraint(cond,TBool);
             const t1 = this.infer(ast.exp1,sym);
             const t2 = this.infer(ast.exp2,sym);
-            this.addConstraint(t1,t2);
-            return t1;
+            const u1 = this.unify(cond,TBool);
+            const u2 = this.unify(t1,t2);
+            this.subst = merge(u1,u2);
+            return this.apply(t1,this.subst);
         }
         else if (ast.node == "lambda") {
             const ne = new TypeEnv(sym);
@@ -123,26 +187,19 @@ class TypeChecker {
             const t1 = this.infer(ast.exp1,sym);
             const t2 = this.infer(ast.exp2,sym);
             const tv = this.fresh();
-            this.addConstraint(t1,Type.TArr(t2,tv));
+            this.unify(t1,Type.TArr(t2,tv));
             return tv;
         }
         return;
     }
 
     prove(ast) {
-        return printType(this.check(ast))
+        // printType()
+        return this.infer(ast).toString();
     }
 }
 
-const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
-const Pair = (fst,snd) => ({ node:"pair", fst:fst, snd:snd });
-const Lit = (type, val) => ({ node: "literal", type: type, val: val });
-const Var = (name) => ({ node: "var", name: name });
-const LetB = (name,exp) => ({ node: "let", name: name, exp:exp });
-const App = (lam, param) => ({ node: "apply", exp1: lam, exp2: param });
-const Condition = (cond,e1,e2) => ({ node: "condition", cond:cond, exp1: e1, exp2: e2 });
-const BinOp = (op, l, r) => ({ node: op, l: l, r: r });
-const UnOp = (op,v) => ({ node: op, val: v });
+
 
 const tc1 = new TypeChecker();
 let code = App(
@@ -155,85 +212,16 @@ let code = App(
     ),
     Lit("int",10)
 );
-console.log(tc1.infer(code).toString());
-tc1.constraints.map(c => console.log(c.toString()));
 
-function occursCheck(v,t,subst) {
-    console.log(v.toString())
-    console.log(t.toString())
-    console.log(subst)
-    if(saman.equal(v,t)) return true;
-    else if(Type.TVar.is(t) && t.v in subst) 
-        return occursCheck(v,subst[t.v],subst);
-    else if(Type.TArr.is(t))
-        return occursCheck(v,t.t2,subst) || occursCheck(v,t.t1,subst);
-    return false;
-}
+console.log(
+    tc1.prove(
+        Condition(
+            Lit("bool",true),
+            Lit("int",0),
+            Lit("int",10)
+        )
+    )
+);
 
-function unifyVar(v,t,subst) {
-    console.log(v.toString())
-    console.log(t.toString())
-    console.log(subst)
-    if(v.v in subst) return unify(subst[v.v],t,subst);
-    else if(Type.TVar.is(t) && t.v in subst) return unify(v,subst[t.v],subst);
-    else if(occursCheck(v,t,subst)) return null;
-    else {
-        subst[v.v] = t;
-        return subst;
-    }
-}
-
-function unify(t1,t2,subst) {
-    console.log(t1.toString())
-    console.log(t2.toString())
-    console.log(subst)
-    if(equal(t1,t2)) return subst;
-    else if(Type.TVar.is(t1)) return unifyVar(t1,t2,subst);
-    else if(Type.TVar.is(t2)) return unifyVar(t2,t1,subst);
-    else if(Type.TArr.is(t1) && Type.TArr.is(t2)) {
-        subst = unify(t1.t2,t2.t2,subst);
-        return unify(t1.t1,t2.t1,subst);
-    }
-    return null;
-}
-
-function unifyAll(equations) {
-    console.log("starting!");
-    subst = {}
-    for(let eq of equations) {
-        console.log(eq.toString());
-        subst = unify(eq.left,eq.right,subst);
-        console.log(subst);
-        if(subst == null) break;
-    }
-    console.log("ending!");
-    return subst;
-}
-
-let sbs = unifyAll(tc1.constraints);
-console.log(sbs);
-for(let a in sbs) {
-    console.log(`${a}: ${sbs[a].toString()}`)
-}
-
-function applyUnifier(typ,subst) {
-    if(!subst) return null;
-    else if(Object.keys(subst).length == 0) return typ;
-    else if(saman.equal(typ,TInt) || saman.equal(typ,TBool)) return typ;
-    else if(Type.TVar.is(typ)) {
-        if(typ.v in subst) return applyUnifier(subst[typ.v],subst);
-        return typ;
-    }
-    else if(Type.TArr.is(typ)) {
-        return Type.TArr(
-            applyUnifier(typ.t1,subst),
-            applyUnifier(typ.t2,subst)
-        );
-    }
-    return null;
-}
-
-// console.log(applyUnifier(Type.TVar("t0"),sbs).toString());
-// console.log(applyUnifier(Type.TVar("t1"),sbs).toString());
 
 module.exports = TypeChecker;
