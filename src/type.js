@@ -1,7 +1,7 @@
 // Type checker
-const saman = require("saman");
+// Based on http://dev.stephendiehl.com/fun/006_hindley_milner.html
+const { sum } = require("styp");
 const { equal, merge } = require("saman");
-const { sum, tagged } = require("styp");
 
 const Type = sum("Types", {
     TVar:["v"],
@@ -10,12 +10,29 @@ const Type = sum("Types", {
     TArr:["t1","t2"]
 });
 
-// const Scheme = tagged("Scheme",["quantifiers","type"])
+const Scheme = sum("Scheme", {
+    Forall:["var","type"]
+});
 
-// const Scheme = sum("Scheme", {
-//     Mono: ["t"],
-//     Poly:["var","t"]
-// });
+// temp
+const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
+const Pair = (fst,snd) => ({ node:"pair", fst:fst, snd:snd });
+const Lit = (type, val) => ({ node: "literal", type: type, val: val });
+const Var = (name) => ({ node: "var", name: name });
+const LetB = (name,exp) => ({ node: "let", name: name, exp:exp });
+const App = (lam, param) => ({ node: "apply", exp1: lam, exp2: param });
+const Condition = (cond,e1,e2) => ({ node: "condition", cond:cond, exp1: e1, exp2: e2 });
+const BinOp = (op, l, r) => ({ node: op, l: l, r: r });
+const UnOp = (op,v) => ({ node: op, val: v });
+
+// Work in progress
+const Expr = sum("Expr", {
+    Var:["name"],
+    App:["e1","e2"],
+    Lit:["type","val"],
+    Lam:["param","body"],
+    Cond:["cond","e1","e2"]
+});
 
 // const Constraint = tagged("ConstraintEq",["left","right"]);
 
@@ -36,17 +53,6 @@ const failedOccursCheck = (name) => genericError(`Failed Occurs Check --> '${nam
 // const notType = (type,msg) => genericError(`Expected type '${printType(type)}' ${msg}`);
 // const typeMismatch = (type1,type2) => genericError(`Couldn't match the expected type: ${printType(type1)} with type: ${printType(type2)}`);
 // const nonFunction = (type) => genericError(`Tried to apply to non-Function type --> ${type}`);
-
-// temp
-const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
-const Pair = (fst,snd) => ({ node:"pair", fst:fst, snd:snd });
-const Lit = (type, val) => ({ node: "literal", type: type, val: val });
-const Var = (name) => ({ node: "var", name: name });
-const LetB = (name,exp) => ({ node: "let", name: name, exp:exp });
-const App = (lam, param) => ({ node: "apply", exp1: lam, exp2: param });
-const Condition = (cond,e1,e2) => ({ node: "condition", cond:cond, exp1: e1, exp2: e2 });
-const BinOp = (op, l, r) => ({ node: op, l: l, r: r });
-const UnOp = (op,v) => ({ node: op, val: v });
 
 class TypeEnv {
     constructor(parent) {
@@ -161,12 +167,12 @@ class TypeChecker {
             return ast.type == "int"? TInt:TBool;
         else if (ast.node == "var") {
             const t = sym.lookUp(ast.name);
-            // if(Type.TArr.is(t)) return this.instantiate(t);
+            // this.instantiate(t);
             return t;
         }
         else if (ast.node == "let") {
             if(sym.exists(ast.name)) defInScope(ast.name);
-            
+            // this.generalize(t);
             return null;
         }
         else if (ast.node == "condition") {
