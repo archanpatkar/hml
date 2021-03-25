@@ -31,9 +31,11 @@ const ops = ["ADD", "SUB", "DIV", "MUL"]
 const genericError = (msg) => { throw new Error(msg) };
 const notInScope = (name) => genericError(`Variable --> '${name}' not in Scope`);
 const defInScope = (name) => genericError(`Cannot redefine Variable --> '${name}'`);
-const notType = (type,msg) => genericError(`Expected type '${printType(type)}' ${msg}`);
-const typeMismatch = (type1,type2) => genericError(`Couldn't match the expected type: ${printType(type1)} with type: ${printType(type2)}`);
-const nonFunction = (type) => genericError(`Tried to apply to non-Function type --> ${type}`);
+const notUnifiable = (type1,type2,msg="") => genericError(`Cannot unify types: '${type1.toString()}' with '${type2.toString()}' ${msg}`);
+const failedOccursCheck = (name) => genericError(`Failed Occurs Check --> '${name.toString()}'`);
+// const notType = (type,msg) => genericError(`Expected type '${printType(type)}' ${msg}`);
+// const typeMismatch = (type1,type2) => genericError(`Couldn't match the expected type: ${printType(type1)} with type: ${printType(type2)}`);
+// const nonFunction = (type) => genericError(`Tried to apply to non-Function type --> ${type}`);
 
 // temp
 const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
@@ -85,7 +87,7 @@ class TypeChecker {
 
     fresh() {
         let temp = "t" + this.count++;
-        this.variables.push(temp);
+        // this.variables.push(temp);
         return Type.TVar(temp);
     }
 
@@ -95,18 +97,18 @@ class TypeChecker {
     // }
 
     occursCheck(v,t,subst) {
-        if(saman.equal(v,t)) return true;
+        if(equal(v,t)) return true;
         else if(Type.TVar.is(t) && t.v in subst) 
-            return occursCheck(v,subst[t.v],subst);
+            return this.occursCheck(v,subst[t.v],subst);
         else if(Type.TArr.is(t))
-            return occursCheck(v,t.t2,subst) || occursCheck(v,t.t1,subst);
+            return this.occursCheck(v,t.t2,subst) || this.occursCheck(v,t.t1,subst);
         return false;
     }
 
     unifyVar(v,t,subst) {
-        if(v.v in subst) return unify(subst[v.v],t,subst);
-        if(Type.TVar.is(t) && t.v in subst) return unify(v,subst[t.v],subst);
-        if(occursCheck(v,t,subst)) return null;
+        if(v.v in subst) return this.unify(subst[v.v],t,subst);
+        if(Type.TVar.is(t) && t.v in subst) return this.unify(v,subst[t.v],subst);
+        if(this.occursCheck(v,t,subst)) failedOccursCheck(v);
         else {
             subst[v.v] = t;
             return subst;
@@ -115,27 +117,27 @@ class TypeChecker {
 
     unify(t1,t2,subst={}) {
         if(equal(t1,t2)) return subst;
-        else if(Type.TVar.is(t1)) return unifyVar(t1,t2,subst);
-        else if(Type.TVar.is(t2)) return unifyVar(t2,t1,subst);
+        else if(Type.TVar.is(t1)) return this.unifyVar(t1,t2,subst);
+        else if(Type.TVar.is(t2)) return this.unifyVar(t2,t1,subst);
         else if(Type.TArr.is(t1) && Type.TArr.is(t2)) {
-            subst = unify(t1.t2,t2.t2,subst);
-            return unify(t1.t1,t2.t1,subst);
+            subst = this.unify(t1.t2,t2.t2,subst);
+            return this.unify(t1.t1,t2.t1,subst);
         }
-        return null;
-    }    
+        notUnifiable(t1,t2);
+    }
 
-    apply(typ,subst) {
+    apply(typ,subst=this.subst) {
         if(!subst) return null;
         else if(Object.keys(subst).length == 0) return typ;
-        else if(saman.equal(typ,TInt) || saman.equal(typ,TBool)) return typ;
+        else if(equal(typ,TInt) || equal(typ,TBool)) return typ;
         else if(Type.TVar.is(typ)) {
-            if(typ.v in subst) return apply(subst[typ.v],subst);
+            if(typ.v in subst) return this.apply(subst[typ.v],subst);
             return typ;
         }
         else if(Type.TArr.is(typ)) {
             return Type.TArr(
-                apply(typ.t1,subst),
-                apply(typ.t2,subst)
+                this.apply(typ.t1,subst),
+                this.apply(typ.t2,subst)
             );
         }
         return null;
@@ -173,22 +175,22 @@ class TypeChecker {
             const t2 = this.infer(ast.exp2,sym);
             const u1 = this.unify(cond,TBool);
             const u2 = this.unify(t1,t2);
-            this.subst = merge(u1,u2);
-            return this.apply(t1,this.subst);
+            this.subst = merge(this.subst,merge(u1,u2));
+            return this.apply(t1);
         }
         else if (ast.node == "lambda") {
             const ne = new TypeEnv(sym);
             const tv = this.fresh();
             ne.addBinding(ast.param, tv);
             const body = this.infer(ast.body,ne);
-            return Type.TArr(tv,body);
+            return this.apply(Type.TArr(tv,body));
         }
         else if (ast.node == "apply") {
+            const tv = this.fresh();
             const t1 = this.infer(ast.exp1,sym);
             const t2 = this.infer(ast.exp2,sym);
-            const tv = this.fresh();
-            this.unify(t1,Type.TArr(t2,tv));
-            return tv;
+            this.subst = merge(this.subst,this.unify(this.apply(t1),Type.TArr(t2,tv)));
+            return this.apply(tv);
         }
         return;
     }
@@ -212,16 +214,22 @@ let code = App(
     ),
     Lit("int",10)
 );
+let code2 = Lam("x",null,
+Condition(
+    Lit("bool",true),
+    Var("x"),
+    Lit("int",0)
+));
+let code3 = Lam("x",null,
+Condition(
+    Var("x"),
+    Lit("int",10),
+    Lit("int",0)
+));
 
-console.log(
-    tc1.prove(
-        Condition(
-            Lit("bool",true),
-            Lit("int",0),
-            Lit("int",10)
-        )
-    )
-);
+
+
+console.log(tc1.prove(code3));
 
 
 module.exports = TypeChecker;
