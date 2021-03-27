@@ -6,7 +6,7 @@ const { equal, merge } = require("saman");
 const Type = sum("Types", {
     TVar:["v"],
     TCon:["name"],
-    // TPair:["cons","cdr"],
+    TPair:["p1","p2"],
     TArr:["t1","t2"]
 });
 
@@ -41,7 +41,7 @@ const Expr = sum("Expr", {
 const TInt = Type.TCon("int");
 const TBool = Type.TCon("bool");
 
-const ops = ["ADD", "SUB", "DIV", "MUL"]
+const ops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "NOT"];
 // const printType = (type) => Array.isArray(type) ? `(${printType(type[0])}->${printType(type[1])})` : type;
 
 // Errors
@@ -83,22 +83,23 @@ class TypeEnv {
 
 class TypeChecker {
     constructor() {
-        this.sym = new TypeEnv(null);
+        this.env = new TypeEnv(null);
         this.count = 0;
         this.subst = {};
         // this.constraints = [];
-        // this.variables = [];
-        // this.ctable = new Map();
     }
 
     fresh() {
         let temp = "t" + this.count++;
-        // this.variables.push(temp);
         return Type.TVar(temp);
     }
 
+    lookUp(name) {
+        const t = this.env.lookUp(name);
+        return Scheme.Forall.is(t)?this.instantiate(t) : t;
+    }
+
     // addConstraint(type1,type2) {
-    //     this.ctable.set(type1,type2);
     //     this.constraints.push(Constraint(type1,type2));
     // }
 
@@ -165,42 +166,41 @@ class TypeChecker {
     }
 
     instantiate(type) {
-        // let t1,t2;
-        // if(Type.TVar.is(type.t1)) t1 = this.fresh();
-        // if(Type.TArr.is(type.t2)) t2 = this.instantiate(type.t2);
-        // else if(Type.TVar.is(type.t2)) t2 = this.fresh();
-        // else t2 = type.t2;
-        // return Type.TArr(t1,t2);
+        const ns = {}
+        type.var.map(v => ns[v.name]=this.fresh());
+        return this.apply(type.type,ns);
     }
 
-    generalize(type) {
-        
+    generalize(type,env) {
+        const enftv = new Set(Object.values(env.env).map(t => this.ftv(t).entries()).flat());
+        const as = new Set([...this.ftv(type.type)].filter(v => !enftv.has(v)));
+        return Scheme.Forall(as.map(v => Type.TVar(v)),type);
     }
 
-    infer(ast,sym=this.sym) {
+    infer(ast,env=this.env) {
         if (ast.node == "literal") 
             return ast.type == "int"? TInt:TBool;
         else if (ast.node == "var") {
-            const t = sym.lookUp(ast.name);
+            const t = env.lookUp(ast.name);
             // this.instantiate(t);
             return t;
         }
         else if (ast.node == "let") {
-            if(sym.exists(ast.name)) defInScope(ast.name);
+            if(env.exists(ast.name)) defInScope(ast.name);
             // this.generalize(t);
             return null;
         }
         else if (ast.node == "condition") {
-            const cond = this.infer(ast.cond,sym);
-            const t1 = this.infer(ast.exp1,sym);
-            const t2 = this.infer(ast.exp2,sym);
+            const cond = this.infer(ast.cond,env);
+            const t1 = this.infer(ast.exp1,env);
+            const t2 = this.infer(ast.exp2,env);
             const u1 = this.unify(cond,TBool);
             const u2 = this.unify(t1,t2);
             this.subst = merge(this.subst,merge(u1,u2));
             return this.apply(t1);
         }
         else if (ast.node == "lambda") {
-            const ne = new TypeEnv(sym);
+            const ne = new TypeEnv(env);
             const tv = this.fresh();
             ne.addBinding(ast.param, tv);
             const body = this.infer(ast.body,ne);
@@ -208,8 +208,8 @@ class TypeChecker {
         }
         else if (ast.node == "apply") {
             const tv = this.fresh();
-            const t1 = this.infer(ast.exp1,sym);
-            const t2 = this.infer(ast.exp2,sym);
+            const t1 = this.infer(ast.exp1,env);
+            const t2 = this.infer(ast.exp2,env);
             this.subst = merge(this.subst,this.unify(this.apply(t1),Type.TArr(t2,tv)));
             return this.apply(tv);
         }
@@ -225,32 +225,32 @@ class TypeChecker {
 
 
 const tc1 = new TypeChecker();
-let code = App(
-    Lam("x",null,
-        Condition(
-            Lit("bool",true),
-            Var("x"),
-            Lit("int",0)
-        )
-    ),
-    Lit("int",10)
-);
-let code2 = Lam("x",null,
-Condition(
-    Lit("bool",true),
-    Var("x"),
-    Lit("int",0)
-));
-let code3 = Lam("x",null,
-Condition(
-    Var("x"),
-    Lit("int",10),
-    Lit("int",0)
-));
-
-
+let code = Lam("x",null,Var("x"));
 
 console.log(tc1.prove(code));
 
 
 module.exports = TypeChecker;
+
+// let code = App(
+//     Lam("x",null,
+//         Condition(
+//             Lit("bool",true),
+//             Var("x"),
+//             Lit("int",0)
+//         )
+//     ),
+//     Lit("int",10)
+// );
+// let code2 = Lam("x",null,
+// Condition(
+//     Lit("bool",true),
+//     Var("x"),
+//     Lit("int",0)
+// ));
+// let code3 = Lam("x",null,
+// Condition(
+//     Var("x"),
+//     Lit("int",10),
+//     Lit("int",0)
+// ));
