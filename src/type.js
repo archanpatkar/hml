@@ -76,7 +76,7 @@ class TypeEnv {
 
     lookUp(name) {
         if (this.env[name]) return this.env[name];
-        else if(this.parent) return this.parent.lookUp(name);
+        if(this.parent) return this.parent.lookUp(name);
         notInScope(name);
     }
 }
@@ -104,10 +104,10 @@ class TypeChecker {
 
     occursCheck(v,t,subst) {
         if(equal(v,t)) return true;
-        else if(Type.TVar.is(t) && t.v in subst) 
+        if(Type.TVar.is(t) && t.v in subst) 
             return this.occursCheck(v,subst[t.v],subst);
-        else if(Type.TArr.is(t))
-            return this.occursCheck(v,t.t2,subst) || this.occursCheck(v,t.t1,subst);
+        if(Type.TArr.is(t))
+            return this.occursCheck(v,t.t1,subst) || this.occursCheck(v,t.t2,subst);
         return false;
     }
 
@@ -123,28 +123,43 @@ class TypeChecker {
 
     unify(t1,t2,subst={}) {
         if(equal(t1,t2)) return subst;
-        else if(Type.TVar.is(t1)) return this.unifyVar(t1,t2,subst);
-        else if(Type.TVar.is(t2)) return this.unifyVar(t2,t1,subst);
-        else if(Type.TArr.is(t1) && Type.TArr.is(t2)) {
-            subst = this.unify(t1.t2,t2.t2,subst);
-            return this.unify(t1.t1,t2.t1,subst);
+        if(Type.TVar.is(t1)) return this.unifyVar(t1,t2,subst);
+        if(Type.TVar.is(t2)) return this.unifyVar(t2,t1,subst);
+        if(Type.TArr.is(t1) && Type.TArr.is(t2)) {
+            subst = this.unify(t1.t1,t2.t1,subst);
+            return this.unify(t1.t2,t2.t2,subst);
         }
         notUnifiable(t1,t2);
     }
 
     apply(typ,subst=this.subst) {
         if(!subst) return null;
-        else if(Object.keys(subst).length == 0) return typ;
-        else if(equal(typ,TInt) || equal(typ,TBool)) return typ;
-        else if(Type.TVar.is(typ)) {
+        if(Object.keys(subst).length == 0) return typ;
+        if(equal(typ,TInt) || equal(typ,TBool)) return typ;
+        if(Type.TVar.is(typ)) {
             if(typ.v in subst) return this.apply(subst[typ.v],subst);
             return typ;
         }
-        else if(Type.TArr.is(typ)) {
+        if(Type.TArr.is(typ)) {
             return Type.TArr(
                 this.apply(typ.t1,subst),
                 this.apply(typ.t2,subst)
             );
+        }
+        if(Scheme.Forall.is(typ)) {
+            typ.var.forEach(v => delete subst[v.v]);
+            return Scheme.Forall(type.var,this.apply(typ.type,subst));
+        }
+        return null;
+    }
+
+    ftv(type) {
+        if(Type.TCon.is(type)) return new Set();
+        if(Type.TVar.is(type)) return new Set([type.v]);
+        if(Type.TArr.is(type)) return new Set([...this.ftv(type.t1),...this.ftv(type.t2)]);
+        if(Scheme.Forall.is(type)) {
+            const bounded = new Set(type.var.map(v => v.v));
+            return new Set([...this.ftv(type.type)].filter(v => !bounded.has(v)));
         }
         return null;
     }
@@ -235,7 +250,7 @@ Condition(
 
 
 
-console.log(tc1.prove(code3));
+console.log(tc1.prove(code));
 
 
 module.exports = TypeChecker;

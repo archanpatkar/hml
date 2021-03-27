@@ -1,6 +1,6 @@
 const symbols = ["(", ")", "\\", ".", "+", ",", "-", "/", "*",":","<",">","=","!","&","|"];
 const types = ["int", "bool"];
-const keywords = ["if", "else", "then", "true", "false","let","rec","fix"];
+const keywords = ["if", "else", "then", "true", "false","let","rec","fix",,"fst", "snd"];
 
 const token_name = new Map();
 token_name.set("(", "LPAREN");
