@@ -1,8 +1,12 @@
 // Type checker
 // Based on http://dev.stephendiehl.com/fun/006_hindley_milner.html
 const { sum } = require("styp");
-const { equal, merge } = require("saman");
+const { equal } = require("saman");
 
+const uops = ["NEG","NOT"];
+const bops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ"];
+
+// Type Defs
 const Type = sum("Types", {
     TVar: ["v"],
     TCon: ["name"],
@@ -13,6 +17,35 @@ const Type = sum("Types", {
 const Scheme = sum("Scheme", {
     Forall: ["var", "type"]
 });
+
+const TInt = Type.TCon("int");
+const TBool = Type.TCon("bool");
+const TUnit = Type.TCon("unit");
+
+const optypes = {
+    "ADD": Type.TArr(TInt,Type.TArr(TInt,TInt)),
+    "MUL": Type.TArr(TInt,Type.TArr(TInt,TInt)),
+    "SUB": Type.TArr(TInt,Type.TArr(TInt,TInt)),
+    "DIV": Type.TArr(TInt,Type.TArr(TInt,TInt)),
+    "AND": Type.TArr(TBool,Type.TArr(TBool,TBool)),
+    "OR": Type.TArr(TBool,Type.TArr(TBool,TBool)),
+    "GT": Type.TArr(TInt,Type.TArr(TInt,TBool)),
+    "LT": Type.TArr(TInt,Type.TArr(TInt,TBool)),
+    "NOT": Type.TArr(TBool,TBool),
+    "NEG": Type.TArr(TInt,TInt),
+    "EQ": Scheme.Forall(
+        [Type.TVar("o1"),Type.TVar("o2")],
+        Type.TArr(Type.TVar("o1"),Type.TArr(Type.TVar("o2"),TBool))
+    )
+}
+
+function printType(type) {
+    if(Type.TCon.is(type)) return type.name;
+    if(Type.TVar.is(type)) return type.v;
+    if(Type.TArr.is(type)) return `(${printType(type.t1)} -> ${printType(type.t2)})`
+    if(Scheme.Forall.is(type)) 
+        return type.var.length?`forall ${type.var.map(e => printType(e)).join(" ")}. ${printType(type.type)}`:printType(type.type);
+}
 
 // temp
 const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
@@ -31,24 +64,13 @@ const Expr = sum("Expr", {
     App: ["e1", "e2"],
     Lit: ["type", "val"],
     Lam: ["param", "body"],
-    Cond: ["cond", "e1", "e2"]
+    Cond: ["cond", "e1", "e2"],
+    Let: ["exp1","exp2"],
+    BinOp: ["op","l","r"],
+    UnOp: ["op","val"]
 });
 
 // const Constraint = tagged("ConstraintEq",["left","right"]);
-
-// const TypeEnv = () => new Map();
-
-const TInt = Type.TCon("int");
-const TBool = Type.TCon("bool");
-
-const ops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "NOT"];
-function printType(type) {
-    if(Type.TCon.is(type)) return type.name;
-    if(Type.TVar.is(type)) return type.v;
-    if(Type.TArr.is(type)) return `${printType(type.t1)} -> ${printType(type.t2)} `
-    if(Scheme.Forall.is(type)) 
-        return type.var.length?`forall ${type.var.map(e => printType(e)).join(" ")}. ${printType(type.type)}`:printType(type.type);
-}
 
 // Errors
 const genericError = (msg) => { throw new Error(msg) };
@@ -56,9 +78,6 @@ const notInScope = (name) => genericError(`Variable: '${name}' not in Scope`);
 const defInScope = (name) => genericError(`Cannot redefine Variable: '${name}'`);
 const notUnifiable = (type1, type2, msg = "") => genericError(`Cannot unify types: ${printType(type1)} with ${printType(type2)} ${msg}`);
 const failedOccursCheck = (v,name) => genericError(`Failed Occurs Check: ${printType(v)} in ${printType(name)}`);
-// const notType = (type,msg) => genericError(`Expected type '${printType(type)}' ${msg}`);
-// const typeMismatch = (type1,type2) => genericError(`Couldn't match the expected type: ${printType(type1)} with type: ${printType(type2)}`);
-// const nonFunction = (type) => genericError(`Tried to apply to non-Function type --> ${type}`);
 
 class TypeEnv {
     constructor(parent) {
@@ -184,6 +203,12 @@ class TypeChecker {
         return null;
     }
 
+    ftvEnv(env) {
+        const curr = Object.values(env.env).map(t => Array.from(this.ftv(t)));
+        if(env.parent) curr.push([...(this.ftvEnv(env.parent))]);
+        return new Set(curr.flat());
+    }
+
     instantiate(type) {
         const ns = {}
         type.var.map(v => ns[v.v] = this.fresh());
@@ -191,7 +216,8 @@ class TypeChecker {
     }
 
     generalize(type, env) {
-        const enftv = new Set(Object.values(env.env).map(t => Array.from(this.ftv(t))).flat());
+        // new Set(Object.values(env.env).map(t => Array.from(this.ftv(t))).flat());
+        const enftv = this.ftvEnv(env);
         const as = new Set([...(this.ftv(type))].filter(v => !enftv.has(v)));
         return Scheme.Forall([...as].map(v => Type.TVar(v)), type);
     }
@@ -224,13 +250,34 @@ class TypeChecker {
             return this.apply(Type.TArr(tv, body));
         }
         else if (ast.node == "apply") {
-            const tv = this.fresh();
             const t1 = this.infer(ast.exp1, env);
             const t2 = this.infer(ast.exp2, this.applyEnv(env));
+            const tv = this.fresh();
             this.unify(this.apply(t1), Type.TArr(t2, tv));
             return this.apply(tv);
         }
-        return;
+        else if(ast.node == "fix") {
+            const t = this.infer(e,env);
+            const tv = this.fresh();
+            this.unify(Type.TArr(tv,tv),t);
+            return this.apply(tv);
+        }
+        else if(uops.includes(ast.node)) {
+            const t = this.infer(ast.val,env);
+            const tv = this.fresh();
+            this.unify(Type.TArr(t,tv),optypes[ast.node]);
+            return this.apply(tv);
+        }
+        else if(bops.includes(ast.node)) {
+            const t1 = this.infer(ast.l,env);
+            const t2 = this.infer(ast.r,env);
+            const tv = this.fresh();
+            let op = optypes[ast.node];
+            if(Scheme.Forall.is(op)) op = this.instantiate(op);
+            this.unify(Type.TArr(t1,Type.TArr(t2,tv)),op);
+            return this.apply(tv);
+        }
+        genericError("Unrecognized AST Node");
     }
 
     getType(name) {
@@ -253,12 +300,16 @@ class TypeChecker {
 const tc1 = new TypeChecker();
 // let code = Lam("x", null, Var("x"));
 let code2 = LetB("fst",Lam("x",null,Lam("y",null,Var("x"))));
+let code4 = LetB("snd",Lam("x",null,Lam("y",null,Var("y"))));
 let code3 = LetB("id",Lam("x",null,Var("x")),App(Var("id"),Lit("int",10)));
+let code5 = LetB("compose",Lam("f",null,Lam("g",null,Lam("x",null,App(Var("f"),App(Var("g"),Var("x")))))));
 // let code4 = LetB("id2",Lam("x",null,Var("x")));
 
 // console.log(tc1.valid(code));
 tc1.valid(code3);
 tc1.valid(code2);
+tc1.valid(code4);
+tc1.valid(code5);
 console.log(tc1.getTypeEnv().join("\n"));
 
 // console.log(tc1.valid(Lam("x",null,App(Var("x"),Var("x")))));
