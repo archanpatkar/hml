@@ -47,7 +47,7 @@ function printType(type) {
     if(Type.TVar.is(type)) return type.v;
     if(Type.TArr.is(type)) return `${printType(type.t1)} -> ${printType(type.t2)} `
     if(Scheme.Forall.is(type)) 
-        return type.var.length?`forall ${type.var.join(" ")}. ${printType(type.type)}`:printType(type.type);
+        return type.var.length?`forall ${type.var.map(e => printType(e)).join(" ")}. ${printType(type.type)}`:printType(type.type);
 }
 
 // Errors
@@ -81,9 +81,6 @@ class TypeEnv {
     }
 
     lookUp(name) {  
-        console.log("here3!");
-        console.log(name);
-        console.log(this.env)
         if (this.env[name]) return this.env[name];
         if (this.parent) return this.parent.lookUp(name);
         notInScope(name);
@@ -93,14 +90,22 @@ class TypeEnv {
 class TypeChecker {
     constructor() {
         this.env = new TypeEnv(null);
-        this.count = 0;
         this.subst = {};
+        this.varInit();
         // this.constraints = [];
     }
 
+    varInit() {
+        this.names = {};
+        this.count = 0;
+        for(let i = "a".charCodeAt(0);i < "z".charCodeAt(0);i++) {
+            this.names[i-97] = [String.fromCharCode(i),0];
+        }
+    }
+
     fresh() {
-        let temp = "t" + this.count++;
-        return Type.TVar(temp);
+        const pair = this.names[this.count++ % 27];
+        return Type.TVar(`${pair[0]}${pair[1]?pair[1]:""}`);
     }
 
     lookUp(name,env) {
@@ -158,7 +163,7 @@ class TypeChecker {
         }
         if (Scheme.Forall.is(typ)) {
             typ.var.forEach(v => delete subst[v.v]);
-            return Scheme.Forall(type.var, this.apply(typ.type, subst));
+            return Scheme.Forall(typ.var, this.apply(typ.type, subst));
         }
         return null;
     }
@@ -172,8 +177,6 @@ class TypeChecker {
     }
 
     ftv(type) {
-        console.log("here!");
-        console.log(type)
         if (Type.TCon.is(type)) return new Set();
         if (Type.TVar.is(type)) return new Set([type.v]);
         if (Type.TArr.is(type)) return new Set([...this.ftv(type.t1), ...this.ftv(type.t2)]);
@@ -185,7 +188,6 @@ class TypeChecker {
     }
 
     instantiate(type) {
-        console.log("here2!");
         const ns = {}
         type.var.map(v => ns[v.name] = this.fresh());
         return this.apply(type.type, ns);
@@ -193,9 +195,8 @@ class TypeChecker {
 
     generalize(type, env) {
         const enftv = new Set(Object.values(env.env).map(t => this.ftv(t).entries()).flat());
-        console.log(printType(type));
         const as = new Set([...(this.ftv(type))].filter(v => !enftv.has(v)));
-        return Scheme.Forall([...as.entries()].map(v => Type.TVar(v)), type);
+        return Scheme.Forall([...as].map(v => Type.TVar(v)), type);
     }
 
     infer(ast, env = this.env) {
@@ -223,9 +224,7 @@ class TypeChecker {
             const tv = this.fresh();
             const ne = new TypeEnv(env);
             ne.addBinding(ast.param, Scheme.Forall([],tv));
-            console.log(ne);
             const body = this.infer(ast.body, ne);
-            console.log(ne)
             return this.apply(Type.TArr(tv, body));
         }
         else if (ast.node == "apply") {
@@ -238,7 +237,15 @@ class TypeChecker {
         return;
     }
 
-    prove(ast) {
+    getType(name) {
+        return printType(this.env.lookUp(name));
+    }
+
+    getTypeEnv() {
+        return Object.keys(this.env.env).map(k => `${k}:${this.getType(k)}`)
+    }
+
+    valid(ast) {
         return printType(this.infer(ast));
     }
 }
@@ -249,11 +256,14 @@ const tc1 = new TypeChecker();
 let code = Lam("x", null, Var("x"));
 let code2 = Lam("x",null,Lam("y",null,Var("x")));
 let code3 = LetB("id",Lam("x",null,Var("x")),App(Var("id"),Lit("int",10)));
-let code4 = LetB("id",Lam("x",null,Var("x")));
+let code4 = LetB("id2",Lam("x",null,Var("x")));
 
-
-console.log(tc1.prove(code4));
-
+console.log(tc1.valid(code));
+console.log(tc1.valid(code2));
+console.log(tc1.valid(code3));
+console.log(tc1.valid(code4));
+console.log("Type Env")
+console.log(tc1.getTypeEnv().join("\n"))
 
 module.exports = TypeChecker;
 
