@@ -52,10 +52,10 @@ function printType(type) {
 
 // Errors
 const genericError = (msg) => { throw new Error(msg) };
-const notInScope = (name) => genericError(`Variable --> '${name}' not in Scope`);
-const defInScope = (name) => genericError(`Cannot redefine Variable --> '${name}'`);
-const notUnifiable = (type1, type2, msg = "") => genericError(`Cannot unify types: '${type1.toString()}' with '${type2.toString()}' ${msg}`);
-const failedOccursCheck = (name) => genericError(`Failed Occurs Check --> '${name.toString()}'`);
+const notInScope = (name) => genericError(`Variable: '${name}' not in Scope`);
+const defInScope = (name) => genericError(`Cannot redefine Variable: '${name}'`);
+const notUnifiable = (type1, type2, msg = "") => genericError(`Cannot unify types: ${printType(type1)} with ${printType(type2)} ${msg}`);
+const failedOccursCheck = (v,name) => genericError(`Failed Occurs Check: ${printType(v)} in ${printType(name)}`);
 // const notType = (type,msg) => genericError(`Expected type '${printType(type)}' ${msg}`);
 // const typeMismatch = (type1,type2) => genericError(`Couldn't match the expected type: ${printType(type1)} with type: ${printType(type2)}`);
 // const nonFunction = (type) => genericError(`Tried to apply to non-Function type --> ${type}`);
@@ -129,14 +129,14 @@ class TypeChecker {
     unifyVar(v, t, subst) {
         if (v.v in subst) return this.unify(subst[v.v], t, subst);
         if (Type.TVar.is(t) && t.v in subst) return this.unify(v, subst[t.v], subst);
-        if (this.occursCheck(v, t, subst)) failedOccursCheck(v);
+        if (this.occursCheck(v, t, subst)) failedOccursCheck(v,t);
         else {
             subst[v.v] = t;
             return subst;
         }
     }
 
-    unify(t1, t2, subst = {}) {
+    unify(t1, t2, subst = this.subst) {
         if (equal(t1, t2)) return subst;
         if (Type.TVar.is(t1)) return this.unifyVar(t1, t2, subst);
         if (Type.TVar.is(t2)) return this.unifyVar(t2, t1, subst);
@@ -151,16 +151,13 @@ class TypeChecker {
         if (!subst) return null;
         if (Object.keys(subst).length == 0) return typ;
         if (equal(typ, TInt) || equal(typ, TBool)) return typ;
-        if (Type.TVar.is(typ)) {
-            if (typ.v in subst) return this.apply(subst[typ.v], subst);
-            return typ;
-        }
-        if (Type.TArr.is(typ)) {
+        if (Type.TVar.is(typ))
+            return typ.v in subst? this.apply(subst[typ.v], subst):typ;
+        if (Type.TArr.is(typ))
             return Type.TArr(
                 this.apply(typ.t1, subst),
                 this.apply(typ.t2, subst)
             );
-        }
         if (Scheme.Forall.is(typ)) {
             typ.var.forEach(v => delete subst[v.v]);
             return Scheme.Forall(typ.var, this.apply(typ.type, subst));
@@ -182,19 +179,19 @@ class TypeChecker {
         if (Type.TArr.is(type)) return new Set([...this.ftv(type.t1), ...this.ftv(type.t2)]);
         if (Scheme.Forall.is(type)) {
             const bounded = new Set(type.var.map(v => v.v));
-            return new Set([...this.ftv(type.type)].filter(v => !bounded.has(v)));
+            return new Set([...(this.ftv(type.type))].filter(v => !bounded.has(v)));
         }
         return null;
     }
 
     instantiate(type) {
         const ns = {}
-        type.var.map(v => ns[v.name] = this.fresh());
+        type.var.map(v => ns[v.v] = this.fresh());
         return this.apply(type.type, ns);
     }
 
     generalize(type, env) {
-        const enftv = new Set(Object.values(env.env).map(t => this.ftv(t).entries()).flat());
+        const enftv = new Set(Object.values(env.env).map(t => Array.from(this.ftv(t))).flat());
         const as = new Set([...(this.ftv(type))].filter(v => !enftv.has(v)));
         return Scheme.Forall([...as].map(v => Type.TVar(v)), type);
     }
@@ -215,9 +212,8 @@ class TypeChecker {
             const cond = this.infer(ast.cond, env);
             const t1 = this.infer(ast.exp1, env);
             const t2 = this.infer(ast.exp2, env);
-            const u1 = this.unify(cond, TBool);
-            const u2 = this.unify(t1, t2);
-            this.subst = merge(this.subst, merge(u1, u2));
+            this.unify(cond, TBool);
+            this.unify(t1, t2);
             return this.apply(t1);
         }
         else if (ast.node == "lambda") {
@@ -231,7 +227,7 @@ class TypeChecker {
             const tv = this.fresh();
             const t1 = this.infer(ast.exp1, env);
             const t2 = this.infer(ast.exp2, this.applyEnv(env));
-            this.subst = merge(this.subst, this.unify(this.apply(t1), Type.TArr(t2, tv)));
+            this.unify(this.apply(t1), Type.TArr(t2, tv));
             return this.apply(tv);
         }
         return;
@@ -242,10 +238,12 @@ class TypeChecker {
     }
 
     getTypeEnv() {
-        return Object.keys(this.env.env).map(k => `${k}:${this.getType(k)}`)
+        return Object.keys(this.env.env).map(k => `${k} :: ${this.getType(k)}`)
     }
 
     valid(ast) {
+        this.varInit();
+        this.subst = {};
         return printType(this.infer(ast));
     }
 }
@@ -253,17 +251,24 @@ class TypeChecker {
 
 
 const tc1 = new TypeChecker();
-let code = Lam("x", null, Var("x"));
-let code2 = Lam("x",null,Lam("y",null,Var("x")));
+// let code = Lam("x", null, Var("x"));
+let code2 = LetB("fst",Lam("x",null,Lam("y",null,Var("x"))));
 let code3 = LetB("id",Lam("x",null,Var("x")),App(Var("id"),Lit("int",10)));
-let code4 = LetB("id2",Lam("x",null,Var("x")));
+// let code4 = LetB("id2",Lam("x",null,Var("x")));
 
-console.log(tc1.valid(code));
-console.log(tc1.valid(code2));
-console.log(tc1.valid(code3));
-console.log(tc1.valid(code4));
-console.log("Type Env")
-console.log(tc1.getTypeEnv().join("\n"))
+// console.log(tc1.valid(code));
+tc1.valid(code3);
+tc1.valid(code2);
+console.log(tc1.getTypeEnv().join("\n"));
+
+// console.log(tc1.valid(Lam("x",null,App(Var("x"),Var("x")))));
+// console.log(tc1.valid(App(Lit("bool",true),Lit("int",-1))));
+// console.log(tc1.valid(code4));
+
+
+// console.log("Type Env")
+
+// console.log(tc1.valid(App(Var("id"),App(Var("id2"),Lit("int",10)))));
 
 module.exports = TypeChecker;
 
@@ -277,6 +282,7 @@ module.exports = TypeChecker;
 //     ),
 //     Lit("int",10)
 // );
+
 // let code2 = Lam("x",null,
 // Condition(
 //     Lit("bool",true),
