@@ -1,21 +1,37 @@
-const symbols = ["(", ")", "\\", ".", "+", ",", "-", "/", "*",":","<",">","=","!","&","|"];
-const types = ["int", "bool"];
-const keywords = ["if", "else", "then", "true", "false","let","rec","fix"];
+const symbols = ["(", ")", "\\", ".", "+", ",", "-", "/", "*","<",">","="];
+const keywords = [
+    "if", "else", "then", "true", "false", 
+    "let", "fix", "not", "and", "or", "in"
+];
+
+// const types = ["int", "bool"];
+// ,":"
+// token_name.set(":", "DEFT");
+// token_name.set("->", "TO");
+// "!","&","|"
 
 const token_name = new Map();
 token_name.set("(", "LPAREN");
 token_name.set(")", "RPAREN");
 token_name.set("\\", "LAM");
 token_name.set(".", "BODY");
-token_name.set(":", "DEFT");
+token_name.set(",", "COMMA");
 token_name.set("+", "ADD");
 token_name.set("-", "SUB");
 token_name.set("*", "MUL");
 token_name.set("/", "DIV");
-token_name.set("->", "TO");
+token_name.set(">", "GT");
+token_name.set("<", "LT");
+token_name.set("=", "EQ");
+token_name.set("let", "LET");
+token_name.set("in", "IN");
 token_name.set("if", "IF");
 token_name.set("else", "ELSE");
 token_name.set("then", "THEN");
+token_name.set("not", "NOT");
+token_name.set("and", "AND");
+token_name.set("or", "OR");
+token_name.set("fix", "FIX");
 
 const white = [" ", "\n", "\b", "\t", "\r"];
 function isWhite(c) {
@@ -53,11 +69,12 @@ function tokenize(string) {
         if (isWhite(ch)) curr++;
         else if (symbols.includes(ch)) {
             curr++;
-            if (ch == "-") {
-                if (string[curr] == ">") ch += string[curr++];
-                tokens.push(token(token_name.get(ch), ch));
-            }
-            else tokens.push(token(token_name.get(ch), ch));
+            // if (ch == "-") {
+            //     if (string[curr] == ">") ch += string[curr++];
+            //     tokens.push(token(token_name.get(ch), ch));
+            // }
+            // else 
+            tokens.push(token(token_name.get(ch), ch));
         }
         else if (isNumber(ch)) {
             n = "" + ch;
@@ -76,7 +93,7 @@ function tokenize(string) {
                 ch = string[++curr];
             }
             if (isBool(n)) tokens.push(token("LIT", n == "true" ? true : false));
-            else if (types.includes(n)) tokens.push(token("TYPE", n));
+            // else if (types.includes(n)) tokens.push(token("TYPE", n));
             else if (keywords.includes(n)) tokens.push(token(token_name.get(n), n));
             else tokens.push(token("IDEN", n));
         }

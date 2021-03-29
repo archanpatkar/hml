@@ -4,9 +4,6 @@ const { sum } = require("styp");
 const { equal } = require("saman");
 const { Expr } = require("./ast");
 
-const uops = ["NEG", "NOT"];
-const bops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ"];
-
 // Type Defs
 const Type = sum("Types", {
     TVar: ["v"],
@@ -89,6 +86,8 @@ class TypeEnv {
     }
 }
 
+// Will convert from on-line solver to 
+// Equation based Constraint Solving/Unification later
 class TypeChecker {
     constructor() {
         this.env = new TypeEnv(null);
@@ -217,10 +216,6 @@ class TypeChecker {
         return tdash;
     }
 
-    inferLetRec(ast,env) {
-
-    }
-
     inferCond(ast,env) {
         const cond = this.infer(ast.cond, env);
         const t1 = this.infer(ast.e1, env);
@@ -314,67 +309,4 @@ class TypeChecker {
     }
 }
 
-
-
-// const tc1 = new TypeChecker();
-// let code = Lam("x", null, Var("x"));
-// let code2 = LetB("fst",Lam("x",null,Lam("y",null,Var("x"))));
-// let code4 = LetB("snd",Lam("x",null,Lam("y",null,Var("y"))));
-// let code3 = LetB("id",Lam("x",null,Var("x")),App(Var("id"),Lit("int",10)));
-// let code5 = LetB("compose",Lam("f",null,Lam("g",null,Lam("x",null,App(Var("f"),App(Var("g"),Var("x")))))));
-
-// App(Lam("x",null,Lam("y",null,Var("x"))),)
-// LetB("p4",);
-// let code6 = LetB("p1",Pair(Lit("int",10),Lit("bool",false)));
-// let code7 = App(Var("p1"),Var("fst"));
-// let code8 = App(Var("p1"),Var("snd"));
-// let code4 = LetB("id2",Lam("x",null,Var("x")));
-
-// tc1.valid(code2);
-// tc1.valid(code4);
-// tc1.valid(code6);
-// console.log(tc1.valid(code7));
-// console.log(tc1.valid(code8));
-// console.log(tc1.getTypeEnv().join("\n"));
-
-// console.log(tc1.valid(code));
-// tc1.valid(code3);
-// tc1.valid(code2);
-// tc1.valid(code4);
-// tc1.valid(code5);
-// console.log(tc1.getTypeEnv().join("\n"));
-
-// console.log(tc1.valid(Lam("x",null,App(Var("x"),Var("x")))));
-// console.log(tc1.valid(App(Lit("bool",true),Lit("int",-1))));
-// console.log(tc1.valid(code4));
-
-
-// console.log("Type Env")
-
-// console.log(tc1.valid(App(Var("id"),App(Var("id2"),Lit("int",10)))));
-
 module.exports = TypeChecker;
-
-// let code = App(
-//     Lam("x",null,
-//         Condition(
-//             Lit("bool",true),
-//             Var("x"),
-//             Lit("int",0)
-//         )
-//     ),
-//     Lit("int",10)
-// );
-
-// let code2 = Lam("x",null,
-// Condition(
-//     Lit("bool",true),
-//     Var("x"),
-//     Lit("int",0)
-// ));
-// let code3 = Lam("x",null,
-// Condition(
-//     Var("x"),
-//     Lit("int",10),
-//     Lit("int",0)
-// ));

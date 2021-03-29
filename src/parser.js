@@ -3,22 +3,42 @@
 const tokenize = require("./lexer");
 const { Expr } = require("./ast");
 
-// AST Nodes
-// const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
-// const Lit = (type, val) => ({ node: "literal", type: type, val: val });
-// const Var = (name) => ({ node: "var", name: name });
-// const App = (lam, param) => ({ node: "apply", exp1: lam, exp2: param });
-// const Condition = (cond,e1,e2) => ({ node: "condition", cond:cond, exp1: e1, exp2: e2 });
-// const BinOp = (op, l, r) => ({ node: op, l: l, r: r });
-// const UnOp = (op,v) => ({ node: op, val: v });
-
+// const uops = ["NEG", "NOT"];
+// const bops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ"];
 const ops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ", "NEG", "NOT"];
-const not = ["EOF","RPAREN","TO","DEFT","BODY","THEN","ELSE"];
+const not = ["EOF","RPAREN","BODY","THEN","ELSE","COMMA"];
+
+// Error handling can be improved
+// Eliminate extra code
+
+// Prec table
+// or - 1
+// and - 2
+// eq - 3
+// gt - 4
+// lt - 4
+// add - 5
+// sub - 5
+// mul - 6
+// div - 6
+// neg - 7
+// not - 7
+// apply - 8
 
 const handlers = {
+    "COMMA": {
+        nud() {
+            this.expect(null,"',' is not a unary operator");
+        }
+    },
+    "IN": {
+        nud() {
+            this.expect(null,"'in' is not a unary operator");
+        }
+    },
     "IDEN": {
         nud(token) {
-            return Var(token.value);
+            return Expr.Var(token.value);
         },
         led(left) {
             this.expect(null,`'${left.name}' not a binary operator`);
@@ -26,8 +46,8 @@ const handlers = {
     },
     "LIT": {
         nud(token) {
-            if (typeof token.value == "number") return Lit("int", token.value);
-            return Lit("bool", token.value);
+            if (typeof token.value == "number") return Expr.Lit("int", token.value);
+            return Expr.Lit("bool", token.value);
         },
         led(left) {
             this.expect(null,`'${left.val}' not a binary operator`);
@@ -35,7 +55,12 @@ const handlers = {
     },
     "LPAREN": {
         nud() {
-            const exp = this.expression(0);
+            let exp = this.expression(0);
+            const nt = this.peek();
+            if(nt && nt.type == "COMMA") {
+                this.consume();
+                exp = Expr.Pair(exp,this.expression(0));
+            }
             this.expect("RPAREN", "Unmatched paren '('");
             return exp;
         },
@@ -43,45 +68,132 @@ const handlers = {
             this.expect(null,"'(' not a binary operator");
         }
     },
-    "MUL": {
+    "LET": {
+        nud() {
+            const name = this.expect("IDEN","Expected an identifier").value;
+            let vars;
+            let nt = this.peek();
+            if(nt && nt.type == "IDEN") {
+                vars = [this.consume().value];
+                while((nt=this.peek()) && nt.type == "IDEN")
+                    vars.push(this.consume().value);
+            }
+            this.expect("EQ","Expected '='");
+            const exp1 = this.expression(0);
+            let exp2;
+            if(vars) {
+                let last = Expr.Lam(vars[vars.length-1],exp1);
+                for(let i = vars.length-2;i >= 0;i++) {
+                    last = Expr.Lam(vars[i],last);
+                }
+                return Expr.Let(name,Expr.Fix(Expr.Lam(name,last)),exp2);
+            }
+            const ik = this.peek();
+            if(ik && ik.type == "IN") {
+                this.consume();
+                exp2 = this.expression(0);
+            }
+            return Expr.Let(name,exp1,exp2);
+        }
+    },
+    "OR": {
+        lbp:1,
+        nud() {
+            this.expect(null,"'or' is not a unary operator");
+        },
+        led(left) {
+            const right = this.expression(this.lbp);
+            return Expr.BinOp("OR",left,right);
+        }
+    },
+    "AND": {
+        lbp:2,
+        nud() {
+            this.expect(null,"'and' is not a unary operator");
+        },
+        led(left) {
+            const right = this.expression(this.lbp);
+            return Expr.BinOp("AND",left,right);
+        }
+    },
+    "EQ": {
         lbp:3,
+        nud() {
+            this.expect(null,"'=' is not a unary operator");
+        },
+        led(left) {
+            const right = this.expression(this.lbp);
+            return Expr.BinOp("EQ",left,right);
+        }
+    },
+    "GT": {
+        lbp:4,
+        nud() {
+            this.expect(null,"'>' is not a unary operator");
+        },
+        led(left) {
+            const right = this.expression(this.lbp);
+            return Expr.BinOp("GT",left,right);
+        }
+    },
+    "LT": {
+        lbp:4,
+        nud() {
+            this.expect(null,"'<' is not a unary operator");
+        },
+        led(left) {
+            const right = this.expression(this.lbp);
+            return Expr.BinOp("LT",left,right);
+        }
+    },
+    "MUL": {
+        lbp:6,
         nud() {
             this.expect(null,"'*' not a unary operator");
         },
         led(left) {
             const right = this.expression(this.lbp);
-            return BinOp("MUL",left,right);
+            return Expr.BinOp("MUL",left,right);
         }
     },
     "DIV": {
-        lbp:3,
+        lbp:6,
         nud() {
             this.expect(null,"'/' not a unary operator");
         },
         led(left) {
             const right = this.expression(this.lbp);
-            return BinOp("DIV",left,right);
+            return Expr.BinOp("DIV",left,right);
         }
     },
     "SUB": {
-        rbp:4,
-        lbp:2,
+        rbp:7,
+        lbp:5,
         nud() {
-            return UnOp("NEG",this.expression(this.rbp));
+            return Expr.UnOp("NEG",this.expression(this.rbp));
         },
         led(left) {
             const right = this.expression(this.lbp);
-            return BinOp("SUB",left,right);
+            return Expr.BinOp("SUB",left,right);
+        }
+    },
+    "NOT": {
+        rbp:7,
+        nud() {
+            return Expr.UnOp("NOT",this.expression(this.rbp));
+        },
+        led(left) {
+            this.expect(null,`'not' is not a binary operator`);
         }
     },
     "ADD": {
-        lbp:2,
+        lbp:5,
         nud() {
             this.expect(null,"'+' not a unary operator");
         },
         led(left) {
             const right = this.expression(this.lbp);
-            return BinOp("ADD",left,right);
+            return Expr.BinOp("ADD",left,right);
         }
     },
     "IF": {
@@ -91,40 +203,35 @@ const handlers = {
             const e1 = this.expression(0);
             this.expect("ELSE","Expected keyword 'else'");
             const e2 = this.expression(0);
-            return Condition(cond,e1,e2);
+            return Expr.Cond(cond,e1,e2);
         },
         led() {
             this.expect(null,"'if' is not a binary operator");
         }
     },
     "LAM": {
-        type(after) {
-            let t = this.expect("TYPE",`Expected type after '${after}'`).value;
-            if(this.peek().type == "TO") {
-                this.consume();
-                let t2 = this.type("->");
-                return [t,t2];
-            }
-            else return t;
-        },
         nud() {
             const param = this.expression(0);
             if(param.node != "var") this.expect(null,"Expected an identifier");
-            this.expect("DEFT","Expected ':'");
-            const type = this.type(":");
             this.expect("BODY","Expected '.'");
             const body = this.expression(0);
-            return Lam(param.name,type,body);
+            return Expr.Lam(param.name,body);
+        }
+    },
+    "FIX": {
+        led(left) {
+            this.expect(null,"'fix' is not a binary operator");
         },
-        led() {
-            expect(null,"'\\' is not a binary operator");
+        nud() {
+            const e = this.expression(0);
+            return Expr.Fix(e);
         }
     },
     "APPLY": {
-        lbp:5,
+        lbp:8,
         led(left) {
             const right = this.expression(this.lbp);
-            return App(left,right);
+            return Expr.App(left,right);
         }
     }
 }
