@@ -26,7 +26,7 @@ rl.prompt();
 
 rl.on('line', (input) => {
     if(input == "help") {
-        console.log("Enter type <name> where name is a valid let binding in the environment to get the Type")
+        console.log("Enter type <name> to get the type, where name is a valid let binding in the environment")
         console.log("Enter mode <m> where m in [value, name, need] to change evaluation method")
         console.log("Enter 'clear' to clean the console")
         console.log("Enter 'exit' or Ctrl + c to exit")
@@ -43,13 +43,18 @@ rl.on('line', (input) => {
         if(mode) machine.setMode(mode)
         else console.log("Please specify a proper mode");
     }
+    else if(input.startsWith("type")) {
+        let name = modes[input.split(" ")[1]];
+        if(name) machine.getType(name);
+        else console.log(machine.infer.getTypeEnv().join("\n"));
+    }
     else {
         try {
             const {output, type} = machine.evaluate(input);
             console.log(`${type}: ${output}`);
         }
         catch (e) {
-            console.log(`Error: ${e.message}`)
+            console.log(`Error -> ${e.message}`)
         }
     }
     rl.prompt();

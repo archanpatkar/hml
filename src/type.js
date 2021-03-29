@@ -88,7 +88,7 @@ class TypeEnv {
 
 // Will convert from on-line solver to 
 // Equation based Constraint Solving/Unification later
-class TypeChecker {
+class TypeVerifier {
     constructor() {
         this.env = new TypeEnv(null);
         this.subst = {};
@@ -303,10 +303,10 @@ class TypeChecker {
         return Object.keys(this.env.env).map(k => `${k} :: ${this.getType(k)}`)
     }
 
-    valid(ast) {
+    is(ast) {
         this.subst = {};
         return printType(this.infer(ast));
     }
 }
 
-module.exports = TypeChecker;
+module.exports = TypeVerifier;

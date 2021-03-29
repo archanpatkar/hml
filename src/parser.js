@@ -3,8 +3,6 @@
 const tokenize = require("./lexer");
 const { Expr } = require("./ast");
 
-// const uops = ["NEG", "NOT"];
-// const bops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ"];
 const ops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ", "NEG", "NOT"];
 const not = ["EOF","RPAREN","BODY","THEN","ELSE","COMMA"];
 
@@ -70,9 +68,11 @@ const handlers = {
     },
     "LET": {
         nud() {
+            console.log(this.peek());
             const name = this.expect("IDEN","Expected an identifier").value;
             let vars;
             let nt = this.peek();
+            console.log(this.peek());
             if(nt && nt.type == "IDEN") {
                 vars = [this.consume().value];
                 while((nt=this.peek()) && nt.type == "IDEN")
@@ -212,7 +212,7 @@ const handlers = {
     "LAM": {
         nud() {
             const param = this.expression(0);
-            if(param.node != "var") this.expect(null,"Expected an identifier");
+            if(!Expr.Var.is(param)) this.expect(null,"Expected an identifier");
             this.expect("BODY","Expected '.'");
             const body = this.expression(0);
             return Expr.Lam(param.name,body);

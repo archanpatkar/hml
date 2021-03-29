@@ -1,12 +1,16 @@
 // Evaluater
 const { Expr } = require("./ast");
 const Parser = require("./parser");
-const TypeChecker = require("./type");
+const TypeVerifier = require("./type");
+const Prelude = require("./prelude");
 
 // Eval types
 const need = 0;
 const name = 1;
 const value = 2;
+
+// const uops = ["NEG", "NOT"];
+// const bops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ"];
 
 class Env {
     constructor(params, args, outer = null, obj = null) {
@@ -27,7 +31,6 @@ class Env {
         } else if (this.outer) {
             return this.outer.find(variable);
         }
-        throw new Error("No such binding");
     }
 
     update(variable, value) {
@@ -40,9 +43,7 @@ class Env {
     }
 
     create(variable, value) {
-        // if(!this.env[variable]) 
         return this.env[variable] = value;
-        // throw new Error("Cannot redefine let binding");
     }
 }
 
@@ -93,19 +94,35 @@ class Lambda {
 }
 
 function pair(fst,snd) {
-    this[0] = fst;
-    this[1] = snd;
+    this.apply = function(f) {
+        return f.apply(fst).apply(snd);
+    }
 }
 
 pair.prototype.toString = function() {
     return `(${this[0]},${this[1]})`
 }
 
+const opfuns = {
+    "ADD": (a,b) => a + b,
+    "MUL": (a,b) => a * b,
+    "SUB": (a,b) => a - b,
+    "DIV": (a,b) => a / b,
+    "AND": (a,b) => a && b,
+    "OR": (a,b) => a || b,
+    "GT": (a,b) => a > b,
+    "LT": (a,b) => a < b,
+    "EQ": (a,b) => a == b,
+    "NOT": a => !a,
+    "NEG": a => -a
+}
+
 function globalEnv() {
     const env = new Env();
-    env.create("fst",{ apply: v => v[0] });
-    env.create("snd",{ apply: v => v[1] });
-    env.create("print",{ apply: v => console.log(v) });
+    // Will add more
+    // env.create("fst",{ apply: v => v[0] });
+    // env.create("snd",{ apply: v => v[1] });
+    // env.create("print",{ apply: v => console.log(v) });
     return env;
 }
 
@@ -114,8 +131,10 @@ const GLOBAL = globalEnv();
 class Interpreter { 
     constructor(global) {
         this.parser = new Parser();
+        this.infer = new TypeVerifier();
         this.mode = value;
         this.global = global?global:GLOBAL;
+        // Prelude.forEach(f => this.evaluate(f));
     }
 
     setMode(mode) {
@@ -123,56 +142,52 @@ class Interpreter {
     }
 
     ieval(ast, env) {
-        // console.log(ast)
-        if (ast.node == "literal") return ast.val;
-        else if (ast.node == "pair") return new pair(
+        if (Expr.Lit.is(ast)) return ast.val;
+        if (Expr.Pair.is(ast)) return new pair(
             this.ieval(ast.fst,env),
             this.ieval(ast.snd,env)
         );
-        else if(ast.node == "let") {
-            return env.create(ast.name,this.ieval(ast.exp,env))
+        if(Expr.Let.is(ast)) {
+            const e1 = this.ieval(ast.exp,env);
+            if(ast.e2) {
+                let ls = new Env(null, null, env, {});
+                ls.create(ast.name, e1);
+                return this.ieval(ast.e2,ls);
+            }
+            return env.create(ast.name,e1);
         }
-        else if (ast.node == "var")  {
+        if (Expr.Var.is(ast)) {
             const v = env.find(ast.name);
             if (v instanceof Thunk) {
                 if(this.mode == name) return v.value();
-                else return v.reduce();
+                return v.reduce();
             }
             return v;
         }
-        else if (ast.node == "condition") {
+        if (Expr.Cond.is(ast)) {
             const cond = this.ieval(ast.cond, env);
-            // console.log("testing if");
-            // console.log(cond);
-            if (cond) return this.ieval(ast.exp1, env);
-            else return this.ieval(ast.exp2, env);
+            if (cond) return this.ieval(ast.e1, env);
+            return this.ieval(ast.e2, env);
         }
-        else if (ast.node == "lambda") {
+        if (Expr.Lam.is(ast))
             return new Lambda(ast.body, ast.param, env, this);
+        if (Expr.App.is(ast)) {
+            const lam = this.ieval(ast.e1,env);
+            if(this.mode == value) return lam.apply(this.ieval(ast.e2,env));
+            return lam.apply(new Thunk(ast.e2,env,this));
         }
-        else if (ast.node == "apply") {
-            const lam = this.ieval(ast.exp1,env);
-            // console.log(ast)
-            // console.log("-----")
-            // console.log(lam)
-            // console.log(lam.apply)
-            if(this.mode == value) return lam.apply(this.ieval(ast.exp2,env));
-            return lam.apply(new Thunk(ast.exp2,env,this));
-        }
-        else if (ast.node == "ADD") 
-            return this.ieval(ast.l, env) + this.ieval(ast.r, env);
-        else if (ast.node == "SUB") 
-            return this.ieval(ast.l, env) - this.ieval(ast.r, env);
-        else if (ast.node == "MUL") 
-            return this.ieval(ast.l, env) * this.ieval(ast.r, env);
-        else if (ast.node == "DIV") 
-            return this.ieval(ast.l, env) / this.ieval(ast.r, env);
-        else if (ast.node == "NEG") return -this.ieval(ast.val,env);
+        if(Expr.Fix.is(ast))
+            return Expr.App(ast,Expr.Fix(ast.e));
+        if (Expr.BinOp.is(ast)) 
+            return opfuns[ast.op](this.ieval(ast.l, env),this.ieval(ast.r, env));
+        if (Expr.UnOp.is(ast)) return opfuns[ast.op](this.ieval(ast.val,env));
     }
 
     evaluate(str) {
         const ast = this.parser.parse(str);
-        return this.ieval(ast,this.global);
+        const type = this.infer.is(ast);
+        const output = this.ieval(ast,this.global);
+        return { output:output, type:type };
     }
 }
 
