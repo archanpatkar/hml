@@ -1,4 +1,5 @@
 // Evaluater
+const { Expr } = require("./ast");
 const Parser = require("./parser");
 const TypeChecker = require("./type");
 

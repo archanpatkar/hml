@@ -2,15 +2,15 @@
 // Based on http://dev.stephendiehl.com/fun/006_hindley_milner.html
 const { sum } = require("styp");
 const { equal } = require("saman");
+const { Expr } = require("./ast");
 
-const uops = ["NEG","NOT"];
+const uops = ["NEG", "NOT"];
 const bops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ"];
 
 // Type Defs
 const Type = sum("Types", {
     TVar: ["v"],
     TCon: ["name"],
-    TPair: ["p1", "p2"],
     TArr: ["t1", "t2"]
 });
 
@@ -21,6 +21,12 @@ const Scheme = sum("Scheme", {
 const TInt = Type.TCon("int");
 const TBool = Type.TCon("bool");
 const TUnit = Type.TCon("unit");
+
+const PrimTypes = {
+    "int":TInt,
+    "bool":TBool,
+    "unit":TUnit
+};
 
 const optypes = {
     "ADD": Type.TArr(TInt,Type.TArr(TInt,TInt)),
@@ -47,29 +53,6 @@ function printType(type) {
         return type.var.length?`forall ${type.var.map(e => printType(e)).join(" ")}. ${printType(type.type)}`:printType(type.type);
 }
 
-// temp
-const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
-const Pair = (fst, snd) => ({ node: "pair", fst: fst, snd: snd });
-const Lit = (type, val) => ({ node: "literal", type: type, val: val });
-const Var = (name) => ({ node: "var", name: name });
-const LetB = (name, exp1, exp2) => ({ node: "let", name: name, exp1: exp1, exp2:exp2 });
-const App = (lam, param) => ({ node: "apply", exp1: lam, exp2: param });
-const Condition = (cond, e1, e2) => ({ node: "condition", cond: cond, exp1: e1, exp2: e2 });
-const BinOp = (op, l, r) => ({ node: op, l: l, r: r });
-const UnOp = (op, v) => ({ node: op, val: v });
-
-// Work in progress
-const Expr = sum("Expr", {
-    Var: ["name"],
-    App: ["e1", "e2"],
-    Lit: ["type", "val"],
-    Lam: ["param", "body"],
-    Cond: ["cond", "e1", "e2"],
-    Let: ["exp1","exp2"],
-    BinOp: ["op","l","r"],
-    UnOp: ["op","val"]
-});
-
 // const Constraint = tagged("ConstraintEq",["left","right"]);
 
 // Errors
@@ -77,7 +60,7 @@ const genericError = (msg) => { throw new Error(msg) };
 const notInScope = (name) => genericError(`Variable: '${name}' not in Scope`);
 const defInScope = (name) => genericError(`Cannot redefine Variable: '${name}'`);
 const notUnifiable = (type1, type2, msg = "") => genericError(`Cannot unify types: ${printType(type1)} with ${printType(type2)} ${msg}`);
-const failedOccursCheck = (v,name) => genericError(`Failed Occurs Check: ${printType(v)} in ${printType(name)}`);
+const failedOccursCheck = (v,name) => genericError(`Cannot construct infinite type: ${printType(v)} = ${printType(name)}`);
 
 class TypeEnv {
     constructor(parent) {
@@ -216,72 +199,109 @@ class TypeChecker {
     }
 
     generalize(type, env) {
-        // new Set(Object.values(env.env).map(t => Array.from(this.ftv(t))).flat());
         const enftv = this.ftvEnv(env);
         const as = new Set([...(this.ftv(type))].filter(v => !enftv.has(v)));
         return Scheme.Forall([...as].map(v => Type.TVar(v)), type);
     }
 
-    infer(ast, env = this.env) {
-        if (ast.node == "literal")
-            return ast.type == "int" ? TInt : TBool;
-        else if (ast.node == "var") 
-            return  this.lookUp(ast.name,env);
-        else if (ast.node == "let") {
-            if (env.exists(ast.name)) defInScope(ast.name);
-            const t1 = this.infer(ast.exp1,env);
-            const tdash = this.generalize(t1,this.applyEnv(env,this.subst));
-            env.addBinding(ast.name,tdash);
-            return ast.exp2?this.infer(ast.exp2,env):tdash;
-        }
-        else if (ast.node == "condition") {
-            const cond = this.infer(ast.cond, env);
-            const t1 = this.infer(ast.exp1, env);
-            const t2 = this.infer(ast.exp2, env);
-            this.unify(cond, TBool);
-            this.unify(t1, t2);
-            return this.apply(t1);
-        }
-        else if (ast.node == "lambda") {
-            const tv = this.fresh();
+    inferLet(ast,env) {
+        if (env.exists(ast.name)) defInScope(ast.name);
+        const t1 = this.infer(ast.e1,env);
+        const tdash = this.generalize(t1,this.applyEnv(env,this.subst));
+        if(ast.e2) {
             const ne = new TypeEnv(env);
-            ne.addBinding(ast.param, Scheme.Forall([],tv));
-            const body = this.infer(ast.body, ne);
-            return this.apply(Type.TArr(tv, body));
+            ne.addBinding(ast.name, tdash);
+            return this.infer(ast.e2,ne);
         }
-        else if (ast.node == "apply") {
-            const t1 = this.infer(ast.exp1, env);
-            const t2 = this.infer(ast.exp2, this.applyEnv(env));
-            const tv = this.fresh();
-            this.unify(this.apply(t1), Type.TArr(t2, tv));
-            return this.apply(tv);
-        }
-        else if(ast.node == "fix") {
-            const t = this.infer(e,env);
-            const tv = this.fresh();
-            this.unify(Type.TArr(tv,tv),t);
-            return this.apply(tv);
-        }
-        else if(uops.includes(ast.node)) {
-            const t = this.infer(ast.val,env);
-            const tv = this.fresh();
-            this.unify(Type.TArr(t,tv),optypes[ast.node]);
-            return this.apply(tv);
-        }
-        else if(bops.includes(ast.node)) {
-            const t1 = this.infer(ast.l,env);
-            const t2 = this.infer(ast.r,env);
-            const tv = this.fresh();
-            let op = optypes[ast.node];
-            if(Scheme.Forall.is(op)) op = this.instantiate(op);
-            this.unify(Type.TArr(t1,Type.TArr(t2,tv)),op);
-            return this.apply(tv);
-        }
+        env.addBinding(ast.name,tdash);
+        return tdash;
+    }
+
+    inferLetRec(ast,env) {
+
+    }
+
+    inferCond(ast,env) {
+        const cond = this.infer(ast.cond, env);
+        const t1 = this.infer(ast.e1, env);
+        const t2 = this.infer(ast.e2, env);
+        this.unify(cond, TBool);
+        this.unify(t1, t2);
+        return this.apply(t1);
+    }
+
+    inferLam(ast,env) {
+        const tv = this.fresh();
+        const ne = new TypeEnv(env);
+        ne.addBinding(ast.param, Scheme.Forall([],tv));
+        const body = this.infer(ast.body, ne);
+        return this.apply(Type.TArr(tv, body));
+    }
+
+    inferApp(ast,env) {
+        const t1 = this.infer(ast.e1, env);
+        const t2 = this.infer(ast.e2, this.applyEnv(env));
+        const tv = this.fresh();
+        this.unify(this.apply(t1), Type.TArr(t2, tv));
+        return this.apply(tv);
+    }
+
+    inferFix(ast,env) {
+        const t = this.infer(ast.e,env);
+        const tv = this.fresh();
+        this.unify(Type.TArr(tv,tv),t);
+        return this.apply(tv);
+    }  
+
+    inferUnOp(ast,env) {
+        const t = this.infer(ast.v,env);
+        const tv = this.fresh();
+        this.unify(Type.TArr(t,tv),optypes[ast.op]);
+        return this.apply(tv);
+    }
+    
+    inferBinOp(ast,env) {
+        const t1 = this.infer(ast.l,env);
+        const t2 = this.infer(ast.r,env);
+        const tv = this.fresh();
+        let op = optypes[ast.op];
+        if(Scheme.Forall.is(op)) op = this.instantiate(op);
+        this.unify(Type.TArr(t1,Type.TArr(t2,tv)),op);
+        return this.apply(tv);
+    }
+
+    inferPair(ast,env) {
+        const fst = this.infer(ast.fst,env);
+        const snd = this.infer(ast.snd,env);
+        const tv = this.fresh();
+        return Type.TArr(Type.TArr(fst,Type.TArr(snd,tv)),tv);
+    }
+
+    infer(ast, env = this.env) {
+        if (Expr.Lit.is(ast)) return PrimTypes[ast.type];
+        if (Expr.Var.is(ast)) return this.lookUp(ast.name,env);
+        if (Expr.Let.is(ast)) return this.inferLet(ast,env);
+        if (Expr.Cond.is(ast)) return this.inferCond(ast,env);
+        if (Expr.Lam.is(ast)) return this.inferLam(ast,env);
+        if (Expr.App.is(ast)) return this.inferApp(ast,env);
+        if (Expr.Fix.is(ast)) return this.inferFix(ast,env);
+        if (Expr.Pair.is(ast)) return this.inferPair(ast,env);
+        if (Expr.UnOp.is(ast)) return this.inferUnOp(ast,env);
+        if (Expr.BinOp.is(ast)) return this.inferBinOp(ast,env);
         genericError("Unrecognized AST Node");
     }
 
     getType(name) {
-        return printType(this.env.lookUp(name));
+        const t = this.env.lookUp(name);
+        if(Scheme.Forall.is(t)) {
+            let i = 0;
+            const ns = {}
+            let as;
+            if(t.var[0] && t.var[0].v == "a") as = t.var;
+            else as = t.var.map(v => ns[v.v] = Type.TVar(String.fromCharCode((i++)+97)));
+            return printType(Scheme.Forall(as, this.apply(t.type, ns)));
+        }
+        return printType(t);
     }
 
     getTypeEnv() {
@@ -289,7 +309,6 @@ class TypeChecker {
     }
 
     valid(ast) {
-        this.varInit();
         this.subst = {};
         return printType(this.infer(ast));
     }
@@ -297,20 +316,33 @@ class TypeChecker {
 
 
 
-const tc1 = new TypeChecker();
+// const tc1 = new TypeChecker();
 // let code = Lam("x", null, Var("x"));
-let code2 = LetB("fst",Lam("x",null,Lam("y",null,Var("x"))));
-let code4 = LetB("snd",Lam("x",null,Lam("y",null,Var("y"))));
-let code3 = LetB("id",Lam("x",null,Var("x")),App(Var("id"),Lit("int",10)));
-let code5 = LetB("compose",Lam("f",null,Lam("g",null,Lam("x",null,App(Var("f"),App(Var("g"),Var("x")))))));
+// let code2 = LetB("fst",Lam("x",null,Lam("y",null,Var("x"))));
+// let code4 = LetB("snd",Lam("x",null,Lam("y",null,Var("y"))));
+// let code3 = LetB("id",Lam("x",null,Var("x")),App(Var("id"),Lit("int",10)));
+// let code5 = LetB("compose",Lam("f",null,Lam("g",null,Lam("x",null,App(Var("f"),App(Var("g"),Var("x")))))));
+
+// App(Lam("x",null,Lam("y",null,Var("x"))),)
+// LetB("p4",);
+// let code6 = LetB("p1",Pair(Lit("int",10),Lit("bool",false)));
+// let code7 = App(Var("p1"),Var("fst"));
+// let code8 = App(Var("p1"),Var("snd"));
 // let code4 = LetB("id2",Lam("x",null,Var("x")));
 
+// tc1.valid(code2);
+// tc1.valid(code4);
+// tc1.valid(code6);
+// console.log(tc1.valid(code7));
+// console.log(tc1.valid(code8));
+// console.log(tc1.getTypeEnv().join("\n"));
+
 // console.log(tc1.valid(code));
-tc1.valid(code3);
-tc1.valid(code2);
-tc1.valid(code4);
-tc1.valid(code5);
-console.log(tc1.getTypeEnv().join("\n"));
+// tc1.valid(code3);
+// tc1.valid(code2);
+// tc1.valid(code4);
+// tc1.valid(code5);
+// console.log(tc1.getTypeEnv().join("\n"));
 
 // console.log(tc1.valid(Lam("x",null,App(Var("x"),Var("x")))));
 // console.log(tc1.valid(App(Lit("bool",true),Lit("int",-1))));

@@ -1,17 +1,18 @@
 // TDOP/Pratt Parser
 // Based on http://crockford.com/javascript/tdop/tdop.html
 const tokenize = require("./lexer");
+const { Expr } = require("./ast");
 
 // AST Nodes
-const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
-const Lit = (type, val) => ({ node: "literal", type: type, val: val });
-const Var = (name) => ({ node: "var", name: name });
-const App = (lam, param) => ({ node: "apply", exp1: lam, exp2: param });
-const Condition = (cond,e1,e2) => ({ node: "condition", cond:cond, exp1: e1, exp2: e2 });
-const BinOp = (op, l, r) => ({ node: op, l: l, r: r });
-const UnOp = (op,v) => ({ node: op, val: v });
+// const Lam = (param, type, body) => ({ node: "lambda", param: param, type: type, body: body });
+// const Lit = (type, val) => ({ node: "literal", type: type, val: val });
+// const Var = (name) => ({ node: "var", name: name });
+// const App = (lam, param) => ({ node: "apply", exp1: lam, exp2: param });
+// const Condition = (cond,e1,e2) => ({ node: "condition", cond:cond, exp1: e1, exp2: e2 });
+// const BinOp = (op, l, r) => ({ node: op, l: l, r: r });
+// const UnOp = (op,v) => ({ node: op, val: v });
 
-const ops = ["ADD","SUB","DIV","MUL","NEG"];
+const ops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ", "NEG", "NOT"];
 const not = ["EOF","RPAREN","TO","DEFT","BODY","THEN","ELSE"];
 
 const handlers = {

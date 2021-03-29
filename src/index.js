@@ -6,28 +6,30 @@ const machine = new Interpreter();
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  prompt: 'styla> '
+  prompt: 'hml> '
 });
 
 console.log(
 `
-        __          __        
-.-----.|  |_.--.--.|  |.---.-.
-|__ --||   _|  |  ||  ||  _  |
-|_____||____|___  ||__||___._|
-            |_____|           
-      
+:::    :::::::    :::: :::        
+:+:    :+:+:+:+: :+:+:+:+:        
++:+    +:++:+ +:+:+ +:++:+        
++#++:++#+++#+  +:+  +#++#+        
++#+    +#++#+       +#++#+        
+#+#    #+##+#       #+##+#        
+###    ######       #############       
 `)
-console.log("styla (Simply Typed Lambda Calculus) 0.0.1");
+console.log("hml (mini-ML w/ Hindley-Milner-Damas) 0.0.1");
 console.log("");
 
 rl.prompt();
 
 rl.on('line', (input) => {
     if(input == "help") {
-        console.log("Type mode <m> where m in [value, name, need] to change evaluation method")
-        console.log("Type 'clear' to clean the console")
-        console.log("Type 'exit' or Ctrl + c to exit")
+        console.log("Enter type <name> where name is a valid let binding in the environment to get the Type")
+        console.log("Enter mode <m> where m in [value, name, need] to change evaluation method")
+        console.log("Enter 'clear' to clean the console")
+        console.log("Enter 'exit' or Ctrl + c to exit")
     }
     else if(input == "clear") console.clear();
     else if(input == "exit") {
