@@ -18,7 +18,7 @@ console.log(
 +#+    +#++#+       +#++#+        
 #+#    #+##+#       #+##+#        
 ###    ######       #############       
-`)
+`);
 console.log("hml (mini-ML w/ Hindley-Milner-Damas) 0.0.1");
 console.log("");
 

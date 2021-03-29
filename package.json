@@ -4,6 +4,7 @@
   "description": "A simple ML like language with Hindley-Milner type inference",
   "main": "index.js",
   "scripts": {
+    "start": "node .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -18,6 +19,6 @@
   "homepage": "https://github.com/archanpatkar/HML#readme",
   "dependencies": {
     "saman": "^0.0.2",
-    "styp": "0.0.1"
+    "styp": "^0.0.1"
   }
 }
