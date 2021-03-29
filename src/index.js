@@ -44,8 +44,8 @@ rl.on('line', (input) => {
         else console.log("Please specify a proper mode");
     }
     else if(input.startsWith("type")) {
-        let name = modes[input.split(" ")[1]];
-        if(name) machine.getType(name);
+        let name = input.split(" ")[1].trim();
+        if(name) console.log(machine.infer.getType(name));
         else console.log(machine.infer.getTypeEnv().join("\n"));
     }
     else {
