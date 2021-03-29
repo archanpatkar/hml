@@ -4,7 +4,7 @@ const tokenize = require("./lexer");
 const { Expr } = require("./ast");
 
 const ops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ", "NEG", "NOT"];
-const not = ["EOF","RPAREN","BODY","THEN","ELSE","COMMA"];
+const not = ["EOF", "RPAREN", "BODY", "IN", "THEN", "ELSE", "COMMA"];
 
 // Error handling can be improved
 // Eliminate extra code
@@ -68,11 +68,9 @@ const handlers = {
     },
     "LET": {
         nud() {
-            console.log(this.peek());
             const name = this.expect("IDEN","Expected an identifier").value;
             let vars;
             let nt = this.peek();
-            console.log(this.peek());
             if(nt && nt.type == "IDEN") {
                 vars = [this.consume().value];
                 while((nt=this.peek()) && nt.type == "IDEN")
@@ -83,10 +81,11 @@ const handlers = {
             let exp2;
             if(vars) {
                 let last = Expr.Lam(vars[vars.length-1],exp1);
-                for(let i = vars.length-2;i >= 0;i++) {
+                for(let i = vars.length-2;i >= 0;i--) {
                     last = Expr.Lam(vars[i],last);
                 }
-                return Expr.Let(name,Expr.Fix(Expr.Lam(name,last)),exp2);
+                let temp = Expr.Let(name,Expr.Fix(Expr.Lam(name,last)),exp2)
+                return temp;
             }
             const ik = this.peek();
             if(ik && ik.type == "IN") {
@@ -302,7 +301,10 @@ class Parser {
 
     parse(str) {
         this.tokens = tokenize(str);
-        return this.expression(0);
+        const e = this.expression(0);
+        const token = this.peek(); 
+        if(token.value != 0 && not.includes(token.type)) this.expect(null,`Unexpected keyword ${token.value}`)
+        return e;
     }
 }
 

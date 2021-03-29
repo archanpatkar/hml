@@ -94,13 +94,16 @@ class Lambda {
 }
 
 function pair(fst,snd) {
-    this.apply = function(f) {
-        return f.apply(fst).apply(snd);
-    }
+    this.fst = fst;
+    this.snd = snd;
+}
+
+pair.prototype.apply = function(f) { 
+    return f.apply(this.fst).apply(this.snd);
 }
 
 pair.prototype.toString = function() {
-    return `(${this[0]},${this[1]})`
+    return `(${this.fst},${this.snd})`;
 }
 
 const opfuns = {
@@ -134,7 +137,7 @@ class Interpreter {
         this.infer = new TypeVerifier();
         this.mode = value;
         this.global = global?global:GLOBAL;
-        // Prelude.forEach(f => this.evaluate(f));
+        Prelude.forEach(f => this.evaluate(f));
     }
 
     setMode(mode) {
@@ -148,7 +151,7 @@ class Interpreter {
             this.ieval(ast.snd,env)
         );
         if(Expr.Let.is(ast)) {
-            const e1 = this.ieval(ast.exp,env);
+            const e1 = this.ieval(ast.e1,env);
             if(ast.e2) {
                 let ls = new Env(null, null, env, {});
                 ls.create(ast.name, e1);
@@ -176,8 +179,8 @@ class Interpreter {
             if(this.mode == value) return lam.apply(this.ieval(ast.e2,env));
             return lam.apply(new Thunk(ast.e2,env,this));
         }
-        if(Expr.Fix.is(ast))
-            return Expr.App(ast,Expr.Fix(ast.e));
+        if(Expr.Fix.is(ast)) 
+            return this.ieval(ast.e.body,env);
         if (Expr.BinOp.is(ast)) 
             return opfuns[ast.op](this.ieval(ast.l, env),this.ieval(ast.r, env));
         if (Expr.UnOp.is(ast)) return opfuns[ast.op](this.ieval(ast.val,env));

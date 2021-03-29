@@ -1,4 +1,4 @@
-// Type checker
+// Type Inference
 // Based on http://dev.stephendiehl.com/fun/006_hindley_milner.html
 const { sum } = require("styp");
 const { equal } = require("saman");
@@ -105,8 +105,9 @@ class TypeVerifier {
     }
 
     fresh() {
-        const pair = this.names[this.count++ % 27];
-        return Type.TVar(`${pair[0]}${pair[1]?pair[1]:""}`);
+        const pair = this.names[this.count++ % 25];
+        let n = pair[1]++;
+        return Type.TVar(`${pair[0]}${n?n:""}`);
     }
 
     lookUp(name,env) {

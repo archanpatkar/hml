@@ -7,7 +7,6 @@ const Expr = sum("Expr", {
     Lam: ["param", "body"],
     Cond: ["cond", "e1", "e2"],
     Let: ["name","e1","e2"],
-    // LetFun: ["name","vars","e"],
     BinOp: ["op","l","r"],
     UnOp: ["op","v"],
     Pair: ["fst","snd"],

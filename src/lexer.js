@@ -1,14 +1,9 @@
 const symbols = ["(", ")", "\\", ".", "+", ",", "-", "/", "*","<",">","="];
+
 const keywords = [
     "if", "else", "then", "true", "false", 
     "let", "fix", "not", "and", "or", "in"
 ];
-
-// const types = ["int", "bool"];
-// ,":"
-// token_name.set(":", "DEFT");
-// token_name.set("->", "TO");
-// "!","&","|"
 
 const token_name = new Map();
 token_name.set("(", "LPAREN");
@@ -73,7 +68,6 @@ function tokenize(string) {
             //     if (string[curr] == ">") ch += string[curr++];
             //     tokens.push(token(token_name.get(ch), ch));
             // }
-            // else 
             tokens.push(token(token_name.get(ch), ch));
         }
         else if (isNumber(ch)) {
@@ -85,10 +79,10 @@ function tokenize(string) {
             }
             tokens.push(token("LIT", parseInt(n)));
         }
-        else if (isAlphabet(ch)) {
+        else if (isAlphabet(ch)|| ch == "_") {
             n = "" + ch;
             ch = string[++curr];
-            while (isAlphabet(ch)) {
+            while (isAlphabet(ch) || isNumber(ch) || ch == "_") {
                 n += ch;
                 ch = string[++curr];
             }
@@ -97,7 +91,7 @@ function tokenize(string) {
             else if (keywords.includes(n)) tokens.push(token(token_name.get(n), n));
             else tokens.push(token("IDEN", n));
         }
-        else curr++;
+        else throw new Error(`Unrecognized char ${ch}`);
     }
     tokens.push(token("EOF",0));
     return tokens;

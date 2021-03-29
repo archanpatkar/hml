@@ -1,6 +1,8 @@
 const id = `let id x = x`;
 const compose = `let compose f g x = f (g x)`;
-const fst = `let fst x y = x`;
-const snd = `let snd x y = y`;
+const kestral = `let kestral x y = x`;
+const kite = `let kite x y = y`;
+const fst = `let fst p = p kestral`;
+const snd = `let snd p = p kite`;
 
-module.exports = [id,compose,fst,snd];
+module.exports = [id,compose,kestral,kite,fst,snd];
