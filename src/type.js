@@ -43,11 +43,15 @@ const optypes = {
 }
 
 function printType(type) {
-    if(Type.TCon.is(type)) return type.name;
-    if(Type.TVar.is(type)) return type.v;
-    if(Type.TArr.is(type)) return `(${printType(type.t1)} -> ${printType(type.t2)})`
-    if(Scheme.Forall.is(type)) 
-        return type.var.length?`forall ${type.var.map(e => printType(e)).join(" ")}. ${printType(type.type)}`:printType(type.type);
+    return Type.is(type) ?
+        type.cata({
+            TCon: ({ name }) => name,
+            TVar: ({ v }) => v,
+            TArr: ({ t1, t2 }) => `(${printType(t1)} -> ${printType(t2)})`
+        }):
+        Scheme.is(type) && type.var.length ?
+        `forall ${type.var.map(e => printType(e)).join(" ")}. ${printType(type.type)}`:
+        printType(type.type)
 }
 
 // const Constraint = tagged("ConstraintEq",["left","right"]);
@@ -176,10 +180,12 @@ class TypeVerifier {
     }
 
     ftv(type) {
-        if (Type.TCon.is(type)) return new Set();
-        if (Type.TVar.is(type)) return new Set([type.v]);
-        if (Type.TArr.is(type)) return new Set([...this.ftv(type.t1), ...this.ftv(type.t2)]);
-        if (Scheme.Forall.is(type)) {
+        if(Type.is(type)) return type.cata({
+            TCon: c => new Set(),
+            TVar: ({ v }) => new Set([v]),
+            TArr: ({ t1, t2 }) => new Set([...this.ftv(t1), ...this.ftv(t2)])
+        });
+        if (Scheme.is(type)) {
             const bounded = new Set(type.var.map(v => v.v));
             return new Set([...(this.ftv(type.type))].filter(v => !bounded.has(v)));
         }
@@ -274,29 +280,33 @@ class TypeVerifier {
     }
 
     infer(ast, env = this.env) {
-        if (Expr.Lit.is(ast)) return PrimTypes[ast.type];
-        if (Expr.Var.is(ast)) return this.lookUp(ast.name,env);
-        if (Expr.Let.is(ast)) return this.inferLet(ast,env);
-        if (Expr.Cond.is(ast)) return this.inferCond(ast,env);
-        if (Expr.Lam.is(ast)) return this.inferLam(ast,env);
-        if (Expr.App.is(ast)) return this.inferApp(ast,env);
-        if (Expr.Fix.is(ast)) return this.inferFix(ast,env);
-        if (Expr.Pair.is(ast)) return this.inferPair(ast,env);
-        if (Expr.UnOp.is(ast)) return this.inferUnOp(ast,env);
-        if (Expr.BinOp.is(ast)) return this.inferBinOp(ast,env);
-        genericError("Unrecognized AST Node");
+        return ast.cata({
+            Lit: ({ type }) =>  PrimTypes[type],
+            Var: ({ name }) => this.lookUp(name,env),
+            Pair: p => this.inferPair(p,env),
+            UnOp: u => this.inferUnOp(u,env),
+            BinOp: b => this.inferBinOp(b,env),
+            Let: lb => this.inferLet(lb,env),
+            Cond: c => this.inferCond(c,env),
+            Lam: l => this.inferLam(l,env),
+            App: a => this.inferApp(a,env),
+            Fix: f => this.inferFix(f,env)
+        });
+    }
+
+    alphaOrder(t) {
+        let i = 0;
+        const ns = {}
+        const as = t.var[0] && t.var[0].v == "a" ? 
+                   t.var : 
+                   t.var
+                    .map(v => ns[v.v] = Type.TVar(String.fromCharCode((i++)+97)));
+        return Scheme.Forall(as, this.apply(t.type, ns));
     }
 
     getType(name) {
         const t = this.env.lookUp(name);
-        if(Scheme.Forall.is(t)) {
-            let i = 0;
-            const ns = {}
-            let as;
-            if(t.var[0] && t.var[0].v == "a") as = t.var;
-            else as = t.var.map(v => ns[v.v] = Type.TVar(String.fromCharCode((i++)+97)));
-            return printType(Scheme.Forall(as, this.apply(t.type, ns)));
-        }
+        if(Scheme.Forall.is(t)) return printType(this.alphaOrder(t));
         return printType(t);
     }
 

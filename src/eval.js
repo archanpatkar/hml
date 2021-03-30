@@ -5,9 +5,9 @@ const TypeVerifier = require("./type");
 const Prelude = require("./prelude");
 
 // Eval types
-const need = 0;
-const name = 1;
-const value = 2;
+const call_by_need = 0;
+const call_by_name = 1;
+const call_by_value = 2;
 
 // const uops = ["NEG", "NOT"];
 // const bops = ["ADD", "SUB", "DIV", "MUL", "AND", "OR", "GT", "LT", "EQ"];
@@ -115,7 +115,7 @@ const opfuns = {
     "OR": (a,b) => a || b,
     "GT": (a,b) => a > b,
     "LT": (a,b) => a < b,
-    "EQ": (a,b) => a == b,
+    "EQ": (a,b) => a === b,
     "NOT": a => !a,
     "NEG": a => -a
 }
@@ -135,7 +135,7 @@ class Interpreter {
     constructor(global) {
         this.parser = new Parser();
         this.infer = new TypeVerifier();
-        this.mode = value;
+        this.mode = call_by_value;
         this.global = global?global:GLOBAL;
         Prelude.forEach(f => this.evaluate(f));
     }
@@ -145,45 +145,45 @@ class Interpreter {
     }
 
     ieval(ast, env) {
-        if (Expr.Lit.is(ast)) return ast.val;
-        if (Expr.Pair.is(ast)) return new pair(
-            this.ieval(ast.fst,env),
-            this.ieval(ast.snd,env)
-        );
-        if(Expr.Let.is(ast)) {
-            const e1 = this.ieval(ast.e1,env);
-            if(ast.e2) {
-                let ls = new Env(null, null, env, {});
-                ls.create(ast.name, e1);
-                return this.ieval(ast.e2,ls);
-            }
-            return env.create(ast.name,e1);
-        }
-        if (Expr.Var.is(ast)) {
-            const v = env.find(ast.name);
-            if (v instanceof Thunk) {
-                if(this.mode == name) return v.value();
-                return v.reduce();
-            }
-            return v;
-        }
-        if (Expr.Cond.is(ast)) {
-            const cond = this.ieval(ast.cond, env);
-            if (cond) return this.ieval(ast.e1, env);
-            return this.ieval(ast.e2, env);
-        }
-        if (Expr.Lam.is(ast))
-            return new Lambda(ast.body, ast.param, env, this);
-        if (Expr.App.is(ast)) {
-            const lam = this.ieval(ast.e1,env);
-            if(this.mode == value) return lam.apply(this.ieval(ast.e2,env));
-            return lam.apply(new Thunk(ast.e2,env,this));
-        }
-        if(Expr.Fix.is(ast)) 
-            return this.ieval(ast.e.body,env);
-        if (Expr.BinOp.is(ast)) 
-            return opfuns[ast.op](this.ieval(ast.l, env),this.ieval(ast.r, env));
-        if (Expr.UnOp.is(ast)) return opfuns[ast.op](this.ieval(ast.val,env));
+        return ast.cata({
+            Lit: ({ val }) => val,
+            Pair: ({ fst, snd }) => new pair(
+                this.ieval(fst,env),
+                this.ieval(snd,env),
+            ),
+            Let: ({ name, e1, e2 }) => {
+                if(this.mode == call_by_value)
+                    e1 = this.ieval(e1,env);
+                else e1 = new Thunk(e1,env,this);
+                if(e2) {
+                    let ls = new Env(null, null, env, {});
+                    ls.create(name, e1);
+                    return this.ieval(e2,ls);
+                }
+                return env.create(name,e1);
+            },
+            Var: ({ name }) => {
+                const v = env.find(name);
+                if (v instanceof Thunk) {
+                    if(this.mode == call_by_name) return v.value();
+                    return v.reduce();
+                }
+                return v;
+            },
+            Cond: ({ cond, e1, e2 }) => this.ieval(cond, env) ? 
+                                        this.ieval(e1, env): 
+                                        this.ieval(e2, env),
+            Lam: ({ param, body }) => new Lambda(body, param, env, this),
+            App: ({ e1, e2 }) => {
+                const lam = this.ieval(e1,env);
+                return this.mode == call_by_value ? 
+                    lam.apply(this.ieval(e2,env)):
+                    lam.apply(new Thunk(e2,env,this));
+            },
+            Fix: ({ e }) => this.ieval(e.body,env),
+            BinOp: ({ op, l, r }) => opfuns[op](this.ieval(l, env),this.ieval(r, env)),
+            UnOp: ({ op, val }) => opfuns[op](this.ieval(val,env))
+        });
     }
 
     evaluate(str) {
@@ -197,8 +197,8 @@ class Interpreter {
 module.exports =  {
     Interpreter:Interpreter, 
     modes: {
-        "need":need,
-        "name":name,
-        "value":value
+        "need":call_by_need,
+        "name":call_by_name,
+        "value":call_by_value
     }
 };
