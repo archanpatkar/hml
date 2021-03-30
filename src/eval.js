@@ -3,6 +3,8 @@ const { Expr } = require("./ast");
 const Parser = require("./parser");
 const TypeVerifier = require("./type");
 const Prelude = require("./prelude");
+const { tagged } = require("styp");
+
 
 // Eval types
 const call_by_need = 0;
@@ -93,10 +95,7 @@ class Lambda {
     }
 }
 
-function pair(fst,snd) {
-    this.fst = fst;
-    this.snd = snd;
-}
+const pair = tagged("Pair",["fst","snd"]);
 
 pair.prototype.apply = function(f) { 
     return f.apply(this.fst).apply(this.snd);
@@ -118,7 +117,7 @@ const opfuns = {
     "EQ": (a,b) => a === b,
     "NOT": a => !a,
     "NEG": a => -a
-}
+};
 
 function globalEnv() {
     const env = new Env();
@@ -182,7 +181,7 @@ class Interpreter {
             },
             Fix: ({ e }) => this.ieval(e.body,env),
             BinOp: ({ op, l, r }) => opfuns[op](this.ieval(l, env),this.ieval(r, env)),
-            UnOp: ({ op, val }) => opfuns[op](this.ieval(val,env))
+            UnOp: ({ op, v }) => opfuns[op](this.ieval(v,env))
         });
     }
 

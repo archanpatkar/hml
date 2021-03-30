@@ -42,12 +42,14 @@ const optypes = {
     )
 }
 
-function printType(type) {
+function printType(type,level=0) {
     return Type.is(type) ?
         type.cata({
             TCon: ({ name }) => name,
             TVar: ({ v }) => v,
-            TArr: ({ t1, t2 }) => `(${printType(t1)} -> ${printType(t2)})`
+            TArr: ({ t1, t2 }) => {
+                return `${level%3?"(":""}${printType(t1,level+1)} -> ${printType(t2,level+1)}${level%3?")":""}`;
+            }
         }):
         Scheme.is(type) && type.var.length ?
         `forall ${type.var.map(e => printType(e)).join(" ")}. ${printType(type.type)}`:
@@ -56,7 +58,7 @@ function printType(type) {
 
 // const Constraint = tagged("ConstraintEq",["left","right"]);
 
-// Errors
+// Error
 const genericError = (msg) => { throw new Error(msg) };
 const notInScope = (name) => genericError(`Variable: '${name}' not in Scope`);
 const defInScope = (name) => genericError(`Cannot redefine Variable: '${name}'`);
