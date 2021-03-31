@@ -24,6 +24,8 @@ console.log("");
 
 rl.prompt();
 
+let pcons = false;
+
 rl.on('line', (input) => {
     if(input == "help") {
         console.log("Enter type <name> to get the type, where name is a valid let binding in the environment")
@@ -48,10 +50,15 @@ rl.on('line', (input) => {
         if(name) console.log(machine.infer.getType(name.trim()));
         else console.log(machine.infer.getTypeEnv().join("\n"));
     }
+    else if(input.startsWith("constraints")) pcons = !pcons;
     else {
         try {
-            const {output, type} = machine.evaluate(input);
+            const {output, type, constraints} = machine.evaluate(input);
             console.log(`${type}: ${output}`);
+            if(pcons) {
+                console.log("Constraints");
+                console.log(constraints);
+            }
         }
         catch (e) {
             console.log(`Error -> ${e.message}`)

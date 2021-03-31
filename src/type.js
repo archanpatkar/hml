@@ -1,6 +1,6 @@
 // Type Inference
 // Based on http://dev.stephendiehl.com/fun/006_hindley_milner.html
-const { sum } = require("styp");
+const { sum, tagged } = require("styp");
 const { equal } = require("saman");
 const { Expr } = require("./ast");
 
@@ -56,7 +56,11 @@ function printType(type,level=0) {
         printType(type.type)
 }
 
-// const Constraint = tagged("ConstraintEq",["left","right"]);
+function printConstraint(eq) {
+    return `${printType(eq.left)} = ${printType(eq.right)}`;
+}
+
+const Constraint = tagged("ConstraintEq",["left","right"]);
 
 // Error
 const genericError = (msg) => { throw new Error(msg) };
@@ -99,7 +103,7 @@ class TypeVerifier {
         this.env = new TypeEnv(null);
         this.subst = {};
         this.varInit();
-        // this.constraints = [];
+        this.constraints = [];
     }
 
     varInit() {
@@ -121,9 +125,9 @@ class TypeVerifier {
         return Scheme.Forall.is(t) ? this.instantiate(t) : t;
     }
 
-    // addConstraint(type1,type2) {
-    //     this.constraints.push(Constraint(type1,type2));
-    // }
+    addConstraint(type1,type2) {
+        this.constraints.push(Constraint(type1,type2));
+    }
 
     occursCheck(v, t, subst) {
         if (equal(v, t)) return true;
@@ -229,6 +233,8 @@ class TypeVerifier {
         const cond = this.infer(ast.cond, env);
         const t1 = this.infer(ast.e1, env);
         const t2 = this.infer(ast.e2, env);
+        this.addConstraint(cond,TBool);
+        this.addConstraint(t1, t2);
         this.unify(cond, TBool);
         this.unify(t1, t2);
         return this.apply(t1);
@@ -246,6 +252,7 @@ class TypeVerifier {
         const t1 = this.infer(ast.e1, env);
         const t2 = this.infer(ast.e2, this.applyEnv(env));
         const tv = this.fresh();
+        this.addConstraint(t1, Type.TArr(t2,tv));
         this.unify(this.apply(t1), Type.TArr(t2, tv));
         return this.apply(tv);
     }
@@ -253,6 +260,7 @@ class TypeVerifier {
     inferFix(ast,env) {
         const t = this.infer(ast.e,env);
         const tv = this.fresh();
+        this.addConstraint(Type.TArr(tv,tv), t);
         this.unify(Type.TArr(tv,tv),t);
         return this.apply(tv);
     }  
@@ -260,6 +268,7 @@ class TypeVerifier {
     inferUnOp(ast,env) {
         const t = this.infer(ast.v,env);
         const tv = this.fresh();
+        this.addConstraint(Type.TArr(t,tv), optypes[ast.op]);
         this.unify(Type.TArr(t,tv),optypes[ast.op]);
         return this.apply(tv);
     }
@@ -270,6 +279,7 @@ class TypeVerifier {
         const tv = this.fresh();
         let op = optypes[ast.op];
         if(Scheme.Forall.is(op)) op = this.instantiate(op);
+        this.addConstraint(Type.TArr(t1,Type.TArr(t2,tv)), op);
         this.unify(Type.TArr(t1,Type.TArr(t2,tv)),op);
         return this.apply(tv);
     }
@@ -318,7 +328,8 @@ class TypeVerifier {
 
     is(ast) {
         this.subst = {};
-        return printType(this.infer(ast));
+        this.constraints = [];
+        return [printType(this.infer(ast)),this.constraints.map(printConstraint).join("\n")];
     }
 }
 

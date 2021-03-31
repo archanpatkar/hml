@@ -187,9 +187,9 @@ class Interpreter {
 
     evaluate(str) {
         const ast = this.parser.parse(str);
-        const type = this.infer.is(ast);
+        const [type, constraints] = this.infer.is(ast);
         const output = this.ieval(ast,this.global);
-        return { output:output, type:type };
+        return { output, type, constraints };
     }
 }
 
