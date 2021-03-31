@@ -146,7 +146,7 @@ class Interpreter {
     ieval(ast, env) {
         return ast.cata({
             Lit: ({ val }) => val,
-            Pair: ({ fst, snd }) => new pair(
+            Pair: ({ fst, snd }) => pair(
                 this.ieval(fst,env),
                 this.ieval(snd,env),
             ),
